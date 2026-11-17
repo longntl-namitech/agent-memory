@@ -1,0 +1,16 @@
+name = "demo_full"
+
+[write]
+stage = "assistant_write"
+
+[sort]
+stage = "coala_stores"
+
+[recall]
+stage = "scored_recall"
+
+[reflect]
+stages = ["reflect"]
+
+[forget]
+stages = ["overwrite", "expire"]
