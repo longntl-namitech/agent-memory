@@ -45,12 +45,11 @@ class Reflect:
         added: set[str] = set()
         for text, importance, sources in cands[:MAX_NEW_RULES]:
             if any(_norm(r.text) == _norm(text) for r in store.rules()):
-                # pure duplicate of an active rule: the lesson is already kept, so the sources can go
-                self._archive_sources(store, sources & log_ids, now)
-                continue
+                continue  # duplicate: archive nothing, its sources may hold more than the rule
             # archive first so store.add never raises RulesFull; the pass's own new rules are never evicted
+            order = {r.id: i for i, r in enumerate(store.all_rules())}
             keep = [r for r in store.rules() if r.id not in added]
-            for r in sorted(keep, key=lambda r: (r.importance, r.last_used_at, r.id))[
+            for r in sorted(keep, key=lambda r: (r.importance, r.last_used_at, r.created_at, order[r.id]))[
                     :max(0, len(store.rules()) + 1 - MAX_RULES)]:
                 store.archive(r.id, now)
             if len(store.rules()) >= MAX_RULES:
@@ -90,4 +89,4 @@ class Reflect:
             src = d.get("sources")
             out.append((str(d["text"]).strip(), imp,
                         {str(s) for s in src} if isinstance(src, list) else set()))
-        return out
+        return (out or None) if items else out  # a non-empty list with no usable item is a failure

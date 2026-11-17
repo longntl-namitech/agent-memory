@@ -86,7 +86,7 @@ def test_duplicate_skipped(tmp_path):
     s.add(entry("rule-0", "rule", "Never  mention PRICE"))
     Reflect().reflect(s, NOW, StubLLM(rules_reply(rule("never mention price", ["log-0"]), rule("fresh", ["log-1"]))))
     assert [r.text for r in s.rules()] == ["Never  mention PRICE", "fresh"]
-    assert [e.id for e in s.log()] == ["log-2"]  # pure duplicate's sources are archived too
+    assert [e.id for e in s.log()] == ["log-0", "log-2"]  # a duplicate archives nothing
 
 
 def test_no_log_no_call(tmp_path):
@@ -95,7 +95,7 @@ def test_no_log_no_call(tmp_path):
     assert llm.prompts == []
 
 
-@pytest.mark.parametrize("bad", ["not json", "[1]", '{"rules": 5}'])
+@pytest.mark.parametrize("bad", ['{"rules": ["a", "b"]}', '{"rules": [1, {"text": ""}]}', "not json", "[1]", '{"rules": 5}'])
 def test_bad_reply_does_nothing(tmp_path, bad):
     s = store_with_logs(tmp_path)
     r = Reflect()
@@ -126,3 +126,28 @@ def test_bad_items_skipped_not_failure(tmp_path):
     r = Reflect()
     r.reflect(s, NOW, StubLLM('{"rules": [1, {"text": ""}, {"nope": 1}, {"text": "ok", "sources": "log-0"}]}'))
     assert [x.text for x in s.rules()] == ["ok"] and r.failures == 0 and len(s.log()) == 3
+
+
+def test_empty_rules_list_is_not_failure(tmp_path):
+    r = Reflect()
+    r.reflect(store_with_logs(tmp_path), NOW, StubLLM('{"rules": []}'))
+    assert r.failures == 0
+
+
+def test_eviction_is_not_lexicographic(tmp_path):
+    s = store_with_logs(tmp_path, 1)
+    for i in range(MAX_RULES):  # same importance, last_used_at and created_at: insertion order decides
+        s.add(entry(f"rule-{i}", "rule", f"old {i}"))
+    Reflect().reflect(s, NOW, StubLLM(rules_reply(rule("a"), rule("b"), rule("c"))))
+    gone = [r.id for r in s.all_rules() if r.status == "archived"]
+    assert gone == ["rule-0", "rule-1", "rule-2"]  # string sort would pick rule-0, rule-1, rule-10
+
+
+def test_eviction_ties_go_to_oldest_created_at(tmp_path):
+    s = store_with_logs(tmp_path, 1)
+    for i in range(MAX_RULES):
+        e = entry(f"rule-{i}", "rule", f"old {i}")
+        e.created_at = datetime(2026, 1, 1 + (i + 5) % 20)  # rule-15 is the oldest
+        s.add(e)
+    Reflect().reflect(s, NOW, StubLLM(rules_reply(rule("a"))))
+    assert [r.id for r in s.all_rules() if r.status == "archived"] == ["rule-15"]
