@@ -53,6 +53,8 @@ def test_run_prints_table_and_extrapolation(monkeypatch, tmp_path, capsys):
     assert "- hermes_version: 0.23.2" in text and "- mean_tokens_per_task: 1000" in text
     assert "- reproducibility: not cache-reproducible" in text and "- tokens: 3000" in text
     assert "one two three" not in text
+    for needle in ("biased downward", "hermes_no_memory", "overshoot it"):
+        assert needle in out and needle in text
     assert no_profiles(home)
 
 
@@ -90,7 +92,9 @@ def test_budget_stop_prints_partial_and_deletes_profile(monkeypatch, tmp_path, c
     assert cli.main(args(tmp_path, "--run", "--max-tokens", "1500")) == 1
     out = capsys.readouterr().out
     assert "stopped: token budget" in out and "mean tokens per task: 1000" in out
-    assert "PARTIAL" in (tmp_path / "results" / "pilot_hermes_default.md").read_text()
+    assert "overshoot: 500 tokens over the cap" in out
+    text = (tmp_path / "results" / "pilot_hermes_default.md").read_text()
+    assert "PARTIAL" in text and "- budget_overshoot: 500" in text
     assert no_profiles(home)
 
 
@@ -109,3 +113,11 @@ def test_overwrite_guard(monkeypatch, tmp_path, capsys):
     log.unlink()
     assert cli.main(run) == 2 and "--overwrite" in capsys.readouterr().err and not log.exists()
     assert cli.main([*run, "--overwrite"]) == 0
+
+
+def test_hermes_crash_exits_1_without_result_or_profile(monkeypatch, tmp_path, capsys):
+    home, _ = setup(monkeypatch, tmp_path, FAKE_HERMES_EXIT="130")
+    assert cli.main(args(tmp_path, "--run", "--max-tokens", "50000")) == 1
+    captured = capsys.readouterr()
+    assert "pilot crashed" in captured.err and "130" in captured.err
+    assert not (tmp_path / "results").exists() and no_profiles(home)

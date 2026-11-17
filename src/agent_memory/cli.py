@@ -222,6 +222,16 @@ def extrapolate(per_task_tokens: list[int], tasks_per_run: int = 40, runs: int =
     return {"mean": mean, "per_run": per_run, "all_runs": per_run * runs, "one_run_per_config": per_run * 2}
 
 
+PILOT_CAVEATS = [
+    "the pilot sends no corrections, plants no wrong rule and starts from an empty MEMORY.md, so the per-task "
+    "figure is biased downward against a full 40-task run (memory and prompt grow over the run)",
+    "6 runs = per run x 6 assumes hermes_default and hermes_no_memory cost the same; probably not true "
+    "(memory off has a shorter prompt), so it is a rough planning number: run the pilot for hermes_no_memory too "
+    "if it matters",
+    "the token cap is checked after each task, so one task can overshoot it",
+]
+
+
 def _pilot_range(text: str) -> int:
     n = int(text)
     if not 1 <= n <= 40:
@@ -294,15 +304,19 @@ def _pilot(args, parser) -> int:
              f"per-config cap {PER_CONFIG_CAP:,}: a single run would "
              f"{'exceed' if ex['per_run'] > PER_CONFIG_CAP else 'stay under'} it"]
     if stopped:
-        print(f"stopped: token budget reached ({stopped}); partial summary of {n} tasks")
+        print(f"stopped: token budget reached ({stopped}); partial summary of {n} tasks; "
+              f"overshoot: {budget.used - args.max_tokens:,} tokens over the cap")
     print("\n".join(lines))
+    print("caveats:\n" + "\n".join(f"- {c}" for c in PILOT_CAVEATS))
     print(f"This is an extrapolation from {n} tasks; nothing beyond the pilot was run. "
           "The user decides before any full Hermes run.")
     extra = {"hermes_version": version, "reproducibility": "not cache-reproducible", "tasks": n,
              "mean_tokens_per_task": f"{ex['mean']:.0f}", "failed_attempts": failed_total,
              "extrapolation_per_run_40_tasks": ex["per_run"], "extrapolation_6_runs": ex["all_runs"],
-             "extrapolation_1_run_per_config": ex["one_run_per_config"], "per_config_cap": PER_CONFIG_CAP}
+             "extrapolation_1_run_per_config": ex["one_run_per_config"], "per_config_cap": PER_CONFIG_CAP,
+             "caveats": " | ".join(PILOT_CAVEATS)}
     if stopped:
+        extra["budget_overshoot"] = budget.used - args.max_tokens
         extra["partial"] = True
     write_result(path, eval_name="pilot", config=args.config, model=agent.model, embedding_model="none",
                  subset=f"first {n} tasks", seed=SIM_SEED, tokens=budget.used,
