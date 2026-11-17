@@ -67,6 +67,7 @@ def _counters(agent) -> dict:
     for s in [getattr(mem, "writer", None), *getattr(mem, "reflectors", []), *agent.retries]:
         if isinstance(s, WriteFilter):
             out["write_filter_fallbacks"] = s.fallbacks
+            out["write_filter_dropped_rules"] = s.dropped_rules
         elif isinstance(s, Reflect):
             out["reflect_failures"] = s.failures
         elif isinstance(s, Reflexion):

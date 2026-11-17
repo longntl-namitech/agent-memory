@@ -128,7 +128,7 @@ def test_run_writes_result_with_stub_llm(monkeypatch, tmp_path):
     assert "- model: stub-model" in text and "- seed: 7" in text
     # "SKIP" fails VAT once that rule is active, so reflexion ran: proof the retry check is wired
     reflexion = int(text.split("- reflexion_fallbacks: ")[1].split("\n")[0])
-    assert reflexion > 0 and "- write_filter_fallbacks: " in text and "- reflect_failures: " in text
+    assert reflexion > 0 and "- write_filter_fallbacks: " in text and "- write_filter_dropped_rules: " in text and "- reflect_failures: " in text
     assert "week 4" in text
     assert "- llm_cache: shared across configs" in text
 

@@ -30,8 +30,14 @@ class WriteFilter(WriteStage):
 
     def __init__(self) -> None:
         self.fallbacks = 0  # events written as a raw log line because the reply was unusable
+        self.dropped_rules = 0  # rules skipped because MAX_RULES active rules already exist
+        self._seen_corrections: set[str] = set()  # the same correction is written at activation and after each violation
 
     def write(self, event: Event, store: Store, now: datetime, llm: LLMClient) -> list[Entry]:
+        if event.kind == "correction":
+            if _norm(event.text) in self._seen_corrections:
+                return []  # already handled: skip the LLM call so reworded copies cannot fill the rule cap
+            self._seen_corrections.add(_norm(event.text))
         keys = sorted({f.key for t in event.tags for f in store.facts(t)} or {f.key for f in store.facts()})
         prompt = _PROMPT.format(keys=", ".join(keys) or "(none)", kind=event.kind,
                                 tags=", ".join(event.tags) or "(none)", text=event.text)
@@ -48,8 +54,11 @@ class WriteFilter(WriteStage):
                                                  importance=d["importance"], created_at=now, last_used_at=now,
                                                  expires_at=None, status="active")
         if kind == "rule":
-            if len(store.rules()) >= MAX_RULES or any(_norm(r.text) == _norm(text) for r in store.rules()):
-                return []  # duplicate, or the cap is hit: skip rather than raise RulesFull
+            if any(_norm(r.text) == _norm(text) for r in store.rules()):
+                return []  # duplicate
+            if len(store.rules()) >= MAX_RULES:
+                self.dropped_rules += 1
+                return []  # the cap is hit: skip rather than raise RulesFull
             e = mk("rule", id_=f"rule-{len(store.all_rules())}")
             store.add(e)
         elif kind == "fact":

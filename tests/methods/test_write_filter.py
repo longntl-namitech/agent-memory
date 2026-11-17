@@ -53,21 +53,47 @@ def test_reuses_existing_key_for_tag(tmp_path):
     assert [(f.key, f.text) for f in store.facts()] == [("booking-link", "link B")]
 
 
-def test_same_correction_twice_one_rule(tmp_path):
+def test_same_llm_rule_text_twice_one_rule(tmp_path):
     store = Store(tmp_path)
     llm = StubLLM(reply(kind="rule", text="Never  mention PRICE"), reply(kind="rule", text="never mention price"))
-    c = ev("x", "correction", ["global"])
-    WriteFilter().write(c, store, NOW, llm)
-    assert WriteFilter().write(c, store, NOW, llm) == []
+    WriteFilter().write(ev("x", "correction", ["global"]), store, NOW, llm)
+    assert WriteFilter().write(ev("y", "correction", ["global"]), store, NOW, llm) == []
     assert len(store.rules()) == 1
+
+
+def test_same_correction_twice_one_llm_call_one_rule(tmp_path):
+    store, w = Store(tmp_path), WriteFilter()
+    llm = StubLLM(reply(kind="rule", text="Never mention price"), reply(kind="rule", text="Do not quote prices"))
+    w.write(ev("Never mention  price", "correction", ["global"]), store, NOW, llm)
+    assert w.write(ev("never mention price", "correction", ["global"]), store, NOW, llm) == []
+    assert len(llm.prompts) == 1 and len(store.rules()) == 1
+
+
+def test_reworded_outputs_of_different_corrections_fill_to_cap(tmp_path):
+    store, w = Store(tmp_path), WriteFilter()
+    llm = StubLLM(*[reply(kind="rule", text=f"Rule wording {i}") for i in range(MAX_RULES + 1)])
+    for i in range(MAX_RULES + 1):
+        w.write(ev(f"correction {i}", "correction", ["global"]), store, NOW, llm)
+    assert len(store.rules()) == MAX_RULES and len(llm.prompts) == MAX_RULES + 1
+    assert w.dropped_rules == 1
+
+
+def test_seen_corrections_do_not_leak_across_instances(tmp_path):
+    llm = StubLLM(reply(kind="rule", text="a"), reply(kind="rule", text="a"))
+    c = ev("same", "correction", ["global"])
+    WriteFilter().write(c, Store(tmp_path / "one"), NOW, llm)
+    WriteFilter().write(c, Store(tmp_path / "two"), NOW, llm)
+    assert len(llm.prompts) == 2
 
 
 def test_full_rules_skipped_without_raising(tmp_path):
     store = Store(tmp_path)
     for i in range(MAX_RULES):
         store.add(Entry(f"rule-{i}", "rule", None, [], f"rule {i}", 5, NOW, NOW, None, "active"))
-    out = WriteFilter().write(ev("x", "correction"), store, NOW, StubLLM(reply(kind="rule", text="brand new")))
+    w = WriteFilter()
+    out = w.write(ev("x", "correction"), store, NOW, StubLLM(reply(kind="rule", text="brand new")))
     assert out == [] and len(store.rules()) == MAX_RULES
+    assert w.dropped_rules == 1 and WriteFilter().dropped_rules == 0
 
 
 def test_bad_json_or_kind_falls_back_to_log(tmp_path):
