@@ -1,0 +1,10 @@
+name = "hermes_no_memory"
+agent = "hermes"
+
+[hermes]
+profile_root = ".hermes-home"  # the isolated HERMES_HOME; a throwaway profile is made in it per run
+binary = "hermes"
+model = "gpt-5.4-nano"
+memory_enabled = false  # MEMORY.md and USER.md stores off, no memory toolset
+key_env = "OPENAI_API_KEY"  # the NAME of the variable holding the key; base_url defaults to $OPENAI_BASE_URL
+max_turns = 20

@@ -22,3 +22,4 @@ from agent_memory.methods import archive  # noqa: F401
 from agent_memory.methods.archive import stage as _archive  # noqa: F401
 from agent_memory.methods import reflexion  # noqa: F401
 from agent_memory.methods.reflexion import stage as _reflexion  # noqa: F401
+from agent_memory.methods import hermes  # noqa: F401

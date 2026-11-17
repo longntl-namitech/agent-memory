@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 import pytest
 
@@ -10,12 +11,15 @@ from agent_memory.core.eval.simulation import DATA, active_rules
 from agent_memory.core.layout import Store
 from agent_memory.core.llm import LLMClient, TokenBudget
 from agent_memory.core.memory import Task
+from agent_memory.methods.hermes import HermesAgent
 
 BASELINES = ["baseline_full_context", "baseline_naive_rag"]
 BUILD_UP = ["b1_write_filter", "b2_coala_stores", "b3_recall", "b4_reflect", "b5_forget", "full"]
 LEAVE_ONE_OUT = {"no_write_filter": "write", "no_coala_stores": "sort", "no_recall": "recall",
                  "no_reflect": "reflect", "no_reflexion": "reflexion", "no_forget": "forget"}
 ALL = BASELINES + BUILD_UP + list(LEAVE_ONE_OUT)
+HERMES = ["hermes_default", "hermes_no_memory"]  # whole-agent baselines, outside the lab and leave-one-out
+FAKE_HERMES = str(Path(__file__).resolve().parent / "fixtures" / "fake_hermes.sh")
 
 
 def units(c: Config) -> dict:
@@ -39,7 +43,21 @@ class ToyEmbedder:
 
 def test_simulation_config_count_is_14():
     sim = [p.stem for p in cli.CONFIGS.glob("*.toml") if not p.stem.startswith("lme_")]
-    assert sorted(sim) == sorted(ALL)
+    lab = [n for n in sim if not n.startswith("hermes")]
+    assert len(ALL) == 14 and sorted(lab) == sorted(ALL)
+    assert sorted(n for n in sim if n.startswith("hermes")) == HERMES
+    assert len(sim) == 16
+
+
+def test_hermes_configs_validate(tmp_path):
+    for name, memory in zip(HERMES, [True, False]):
+        cfg = load_config(cli.CONFIGS / f"{name}.toml")
+        assert cfg.name == name and cfg.agent == "hermes"
+        assert cfg.options["hermes"]["memory_enabled"] is memory
+        agent = build(cfg, llm=stub_llm(tmp_path), store=None, binary=FAKE_HERMES, profile_root=tmp_path / "hh")
+        assert isinstance(agent, HermesAgent) and agent.memory_enabled is memory and agent.binary == FAKE_HERMES
+        assert agent.model == "gpt-5.4-nano" and agent.key_env == cfg.options["hermes"]["key_env"]
+        assert not (tmp_path / "hh").exists()  # the profile is made lazily, on first use
 
 
 def test_every_config_validates(tmp_path):
@@ -251,3 +269,80 @@ def test_results_mark_baseline_and_reflexion_metrics(monkeypatch, tmp_path):
 
 def test_counters_empty_for_agent_without_memory_or_retries():
     assert cli._counters(object()) == {}
+
+
+def test_hermes_estimate_only_prices_zero_and_says_pilot(monkeypatch, capsys):
+    monkeypatch.setattr(cli, "make_llm", no_llm)
+    assert cli.main(["run", "--eval", "simulation", "--configs", "hermes_default"]) == 0
+    out = capsys.readouterr().out
+    assert "hermes_default: 0" in out and "total: 0" in out
+    assert "Hermes tokens are measured by the pilot, not estimated" in out
+
+
+def hermes_run(monkeypatch, tmp_path, **env):
+    home = tmp_path / "hermes-home"
+    deps = {"binary": FAKE_HERMES, "profile_root": home,
+            "env": {"HOME": str(tmp_path / "fake-home"), **env}}
+    monkeypatch.setattr(cli, "hermes_deps", lambda: deps)
+    monkeypatch.setattr(cli, "make_llm", lambda budget: stub_llm(tmp_path, budget))
+    return home
+
+
+def no_profiles(home) -> bool:
+    return not any((home / "profiles").glob("*")) if (home / "profiles").exists() else True
+
+
+def test_hermes_run_writes_result_and_deletes_profile(monkeypatch, tmp_path):
+    home = hermes_run(monkeypatch, tmp_path, FAKE_HERMES_MEMORY_ADD="Prices go excl. VAT.")
+    assert cli.main(run_args(tmp_path, "hermes_default", "--max-tokens", "500000")) == 0
+    text = (tmp_path / "results" / "simulation_hermes_default.md").read_text()
+    assert not text.startswith("PARTIAL") and "- model: gpt-5.4-nano" in text
+    assert "- tokens: 50000" in text  # 40 tasks x 1,250 from the usage file
+    assert "- hermes_version: 0.23.2" in text and "- reproducibility: not cache-reproducible" in text
+    assert "- failed_attempts: 0" in text and "- memory_size_per_week:" in text and "week 4" in text
+    assert "llm_cache" not in text
+    assert no_profiles(home)
+
+
+def test_hermes_planted_rule_is_reviewed_out_of_memory_md(monkeypatch, tmp_path):
+    """The planted rule lands in MEMORY.md at task 10, Hermes patches it, the Monday review removes it."""
+    hermes_run(monkeypatch, tmp_path, FAKE_HERMES_PATCH_OLD="Never mention prices",
+               FAKE_HERMES_PATCH_NEW="NEVER  mention PRICES")
+    sizes = []
+    real_reflect = HermesAgent.reflect
+
+    def reflect(self, now):
+        sizes.append(self.memory_entries())
+        return real_reflect(self, now)
+
+    monkeypatch.setattr(HermesAgent, "reflect", reflect)
+    assert cli.main(run_args(tmp_path, "hermes_default", "--max-tokens", "500000")) == 0
+    assert sizes[0] == [] and sizes[1] == ["NEVER  mention PRICES in follow-up emails, let the lead ask first."]
+    assert sizes[2] == [] and sizes[3] == []  # the week-3 Monday review removed the patched rule
+
+
+def test_hermes_crash_writes_partial_and_deletes_profile(monkeypatch, tmp_path):
+    home = hermes_run(monkeypatch, tmp_path, FAKE_HERMES_EXIT="130")
+    assert cli.main(run_args(tmp_path, "hermes_default", "--max-tokens", "500000")) == 1
+    text = (tmp_path / "results" / "simulation_hermes_default.md").read_text()
+    assert text.startswith("PARTIAL RESULT") and "- completed_tasks: 0" in text
+    assert no_profiles(home)
+
+
+def test_hermes_failed_attempts_counted(monkeypatch, tmp_path):
+    home = hermes_run(monkeypatch, tmp_path, FAKE_HERMES_EXIT="2")
+    assert cli.main(run_args(tmp_path, "hermes_no_memory", "--max-tokens", "500000")) == 0
+    text = (tmp_path / "results" / "simulation_hermes_no_memory.md").read_text()
+    assert "- failed_attempts: 40" in text
+    assert no_profiles(home)
+
+
+def test_hermes_budget_from_its_own_usage(monkeypatch, tmp_path):
+    home = hermes_run(monkeypatch, tmp_path, FAKE_HERMES_INPUT_TOKENS="30000")
+    code = cli.main(run_args(tmp_path, "hermes_default", "--max-tokens", "500000"))
+    assert code == 1
+    text = (tmp_path / "results" / "simulation_hermes_default.md").read_text()
+    # 30,250 per task: the 4th task pushes the run over the 100k cap and is reported as crashed tokens
+    assert text.startswith("PARTIAL RESULT") and "- completed_tasks: 3" in text
+    assert "- crashed_tokens: 30250" in text and "- tokens: 121000" in text
+    assert no_profiles(home)

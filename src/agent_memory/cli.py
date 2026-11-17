@@ -45,6 +45,11 @@ def make_llm(budget: TokenBudget) -> LLMClient:
                      budget, ".cache/llm")
 
 
+def hermes_deps() -> dict:
+    """Overrides for the [hermes] config table (binary, profile_root, env); tests inject a fake binary here."""
+    return {}
+
+
 def make_embedder():
     from agent_memory.methods.scored_recall.stage import _default_embedder
 
@@ -92,29 +97,46 @@ def _run_simulation(name: str, llm: LLMClient, store_dir: Path, results_dir: Pat
     tasks = [Task(**json.loads(ln)) for ln in (DATA / "tasks.jsonl").read_text(encoding="utf-8").splitlines()
              if ln.strip()]
     embedder = make_embedder() if cfg.memory == "naive_rag" else None
-    store = Store(store_dir)
-    agent = build(cfg, llm=llm, store=store, check=sim_check(corrections),
-                  **({"embedder": embedder} if embedder else {}))
-    before = llm.budget.used
-    extra, aborted = {"llm_cache": CACHE_NOTE, "per_config_cap": per_config_cap}, None
-    if "reflexion" in cfg.reflect:
-        extra["note"] = REFLEXION_NOTE  # the retry check is the scoring check and the prompt has the rule wording
+    hermes = cfg.agent == "hermes"
+    # Hermes keeps its own MEMORY.md (agent.store) and spends llm.budget from its usage file; it makes a profile.
+    store = None if hermes else Store(store_dir)
+    deps = hermes_deps() if hermes else ({"embedder": embedder} if embedder else {})
+    agent = build(cfg, llm=llm, store=store, check=sim_check(corrections), **deps)
     try:
-        metrics = run_simulation(agent, tasks, SimClock(SIM_START), Reviewer([blocklist["marker"]]),
-                                 store=store, corrections=corrections, blocklist=blocklist)
-    except SimulationAborted as exc:
-        print(f"{name}: {exc}", file=sys.stderr)
-        metrics, aborted = exc.metrics, exc
-        extra |= {"partial": True, "completed_tasks": exc.completed_tasks, "crashed_tokens": exc.crashed_tokens}
-    weeks = {f"week {w}": m for w, m in metrics.items()}
-    if cfg.memory:  # a whole-memory baseline recalls only the log, so the planted rule never reaches its prompt
-        weeks = {w: dataclasses.asdict(m) | {"extra_from_wrong_rule": BASELINE_NA} for w, m in weeks.items()}
-    path = _results_path(results_dir, name)
-    write_result(path, eval_name="simulation", config=name, model=llm.model,
-                 embedding_model=embedder.name if embedder else "none", subset=f"all {len(tasks)} tasks",
-                 seed=SIM_SEED, tokens=llm.budget.used - before,
-                 metrics=weeks,
-                 extra={**extra, **_counters(agent)}, run_date=date.today().isoformat())
+        before = llm.budget.used
+        extra, aborted = {"per_config_cap": per_config_cap}, None
+        if hermes:
+            extra |= {"hermes_version": agent.version(), "reproducibility": "not cache-reproducible"}
+        else:
+            extra["llm_cache"] = CACHE_NOTE
+        if "reflexion" in cfg.reflect:
+            extra["note"] = REFLEXION_NOTE  # the retry check is the scoring check and the prompt has the rule wording
+        try:
+            metrics = run_simulation(agent, tasks, SimClock(SIM_START), Reviewer([blocklist["marker"]]),
+                                     store=agent.store if hermes else store, corrections=corrections,
+                                     blocklist=blocklist)
+        except SimulationAborted as exc:
+            print(f"{name}: {exc}", file=sys.stderr)
+            metrics, aborted = exc.metrics, exc
+            crashed = exc.crashed_tokens
+            if hermes:  # no LLMClient to price the crashed step: what Hermes spent minus what the weeks hold
+                crashed = agent.tokens_used - sum(m.tokens for m in metrics.values())
+            extra |= {"partial": True, "completed_tasks": exc.completed_tasks, "crashed_tokens": crashed}
+        if hermes:
+            extra |= {"memory_size_per_week": {f"week {i}": s for i, s in enumerate(agent.memory_sizes, 1)},
+                      "failed_attempts": agent.failed_attempts}
+        weeks = {f"week {w}": m for w, m in metrics.items()}
+        if cfg.memory:  # a whole-memory baseline recalls only the log, so the planted rule never reaches its prompt
+            weeks = {w: dataclasses.asdict(m) | {"extra_from_wrong_rule": BASELINE_NA} for w, m in weeks.items()}
+        path = _results_path(results_dir, name)
+        write_result(path, eval_name="simulation", config=name, model=agent.model if hermes else llm.model,
+                     embedding_model=embedder.name if embedder else "none", subset=f"all {len(tasks)} tasks",
+                     seed=SIM_SEED, tokens=llm.budget.used - before,
+                     metrics=weeks,
+                     extra={**extra, **_counters(agent)}, run_date=date.today().isoformat())
+    finally:
+        if hermes:
+            agent.close()  # no Hermes profile may outlive the run, whatever happened above
     print(f"{name}: wrote {path}")
     return aborted
 
@@ -217,6 +239,9 @@ def _run(args, parser) -> int:
     if args.eval == "simulation":
         print("note: the simulation per-task numbers are a placeholder (2,000 prompt + 500 completion per task)")
         print(f"per-config cap: {args.per_config_cap:,}")
+        if any(n.startswith("hermes") for n in names):
+            print("note: Hermes tokens are measured by the pilot, not estimated (priced at 0 here); "
+                  "its run stops at the per-config cap using its own usage file")
     else:
         print(LME_NOTE)
     try:

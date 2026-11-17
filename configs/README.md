@@ -4,6 +4,8 @@ One TOML file per ablation config: 2 baselines, the build-up chain `b1_write_fil
 
 `no_reflexion` is identical to `b5_forget` (`full` is `b5_forget` plus `reflexion`). One of them is a duplicate, not a second run.
 
+`hermes_default` and `hermes_no_memory` run Hermes Agent as a whole-agent baseline (see `src/agent_memory/methods/hermes/README.md`). They are outside the 14 lab configs and leave-one-out; the estimate prices them at 0 because the pilot measures Hermes tokens.
+
 ## LongMemEval configs (`lme_*`)
 
 Six configs run on LongMemEval: the baselines `lme_baseline_full_context` and `lme_baseline_naive_rag`, and the build-up chain `lme_b1_write_filter`, `lme_b2_coala_stores` (+ `coala_stores`), `lme_b3_scored_recall` (+ `scored_recall`), `lme_full` (+ the `overwrite` forget stage). `lme_full` is the spec's `full_lme`. Leave-one-out is backlog on this eval.
