@@ -10,9 +10,12 @@ Ability mapping (the five LongMemEval abilities), from `question_type` plus the 
   multi-session reasoning - multi-session
   knowledge updates       - knowledge-update
   temporal reasoning      - temporal-reasoning
-UNVERIFIED: the `question_type` names and row fields (question_id, question_type, question, answer,
-question_date, haystack_*) come from the LongMemEval paper/README as remembered, not from the
-downloaded files. Check them with `split_sizes()` on the real file; unknown types raise KeyError.
+Verified against the LongMemEval README: the question_type names above, the `_abs` rule (abstention
+rows sit inside the other types' rows) and the file names. Not fetched: the `resolve/main` URL
+pattern. An unknown question_type raises ValueError.
+
+Memory: json-loading the ~265 MB s_cleaned file needs roughly 1-3 GB RAM, so the runner should load
+it once, select, and write the selected 50 to a small JSON in `.cache/`.
 
 Split sizes of the cleaned split must be checked at download time (spec caveat): `split_sizes`.
 """
@@ -40,7 +43,12 @@ _TYPE_TO_ABILITY = {
 def ability(row: dict) -> str:
     if str(row["question_id"]).endswith("_abs"):
         return "abstention"
-    return _TYPE_TO_ABILITY[row["question_type"]]
+    try:
+        return _TYPE_TO_ABILITY[row["question_type"]]
+    except KeyError:
+        raise ValueError(
+            f"unknown question_type {row['question_type']!r} (question_id {row['question_id']!r})"
+        ) from None
 
 
 def _stream(url: str, dest: Path) -> None:
@@ -92,6 +100,10 @@ def select_subset(rows: list[dict], per_ability: int = 10, seed: int = 7) -> lis
     return _stratified(rows, per_ability, seed)
 
 
-def full_context_subset(rows: list[dict], n: int = 10, seed: int = 7) -> list[dict]:
-    """About `n` rows from the selected set, n // 5 per ability (10 -> 2 per ability)."""
-    return _stratified(rows, n // len(ABILITIES), seed)
+def full_context_subset(rows: list[dict], n: int = 10) -> list[dict]:
+    """Subset of `rows` (pass the selected set): first n // 5 per ability by question_id. No sampling."""
+    out = []
+    for a in ABILITIES:
+        pool = sorted((r for r in rows if ability(r) == a), key=lambda r: r["question_id"])
+        out += pool[: n // len(ABILITIES)]
+    return out

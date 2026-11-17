@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from agent_memory.core.eval import longmemeval as lme
 
 FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "longmemeval_mini.json"
@@ -42,9 +44,17 @@ def test_seeded_deterministic_and_pure():
 
 
 def test_full_context_subset_about_10():
-    sub = lme.full_context_subset(lme.select_subset(make_rows()))
+    sel = lme.select_subset(make_rows())
+    sub = lme.full_context_subset(sel)
     assert len(sub) == 10
     assert all(sum(lme.ability(r) == a for r in sub) == 2 for a in lme.ABILITIES)
+    assert {r["question_id"] for r in sub} <= {r["question_id"] for r in sel}
+    assert sub == lme.full_context_subset(list(reversed(sel)))
+
+
+def test_unknown_question_type_raises_value_error():
+    with pytest.raises(ValueError, match="weird-type.*q9"):
+        lme.ability({"question_id": "q9", "question_type": "weird-type"})
 
 
 def test_split_sizes_on_fixture():
