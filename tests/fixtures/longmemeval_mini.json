@@ -1,0 +1,627 @@
+[
+ {
+  "question_id": "q000",
+  "question_type": "single-session-user",
+  "question": "Q0?",
+  "answer": "A0",
+  "question_date": "2023/05/30 (Tue) 10:00",
+  "haystack_dates": [
+   "2023/05/01 (Mon) 09:00"
+  ],
+  "haystack_session_ids": [
+   "s0"
+  ],
+  "haystack_sessions": [
+   [
+    {
+     "role": "user",
+     "content": "hi"
+    },
+    {
+     "role": "assistant",
+     "content": "hello"
+    }
+   ]
+  ]
+ },
+ {
+  "question_id": "q001",
+  "question_type": "single-session-assistant",
+  "question": "Q1?",
+  "answer": "A1",
+  "question_date": "2023/05/30 (Tue) 10:00",
+  "haystack_dates": [
+   "2023/05/01 (Mon) 09:00"
+  ],
+  "haystack_session_ids": [
+   "s1"
+  ],
+  "haystack_sessions": [
+   [
+    {
+     "role": "user",
+     "content": "hi"
+    },
+    {
+     "role": "assistant",
+     "content": "hello"
+    }
+   ]
+  ]
+ },
+ {
+  "question_id": "q002",
+  "question_type": "single-session-preference",
+  "question": "Q2?",
+  "answer": "A2",
+  "question_date": "2023/05/30 (Tue) 10:00",
+  "haystack_dates": [
+   "2023/05/01 (Mon) 09:00"
+  ],
+  "haystack_session_ids": [
+   "s2"
+  ],
+  "haystack_sessions": [
+   [
+    {
+     "role": "user",
+     "content": "hi"
+    },
+    {
+     "role": "assistant",
+     "content": "hello"
+    }
+   ]
+  ]
+ },
+ {
+  "question_id": "q003",
+  "question_type": "multi-session",
+  "question": "Q3?",
+  "answer": "A3",
+  "question_date": "2023/05/30 (Tue) 10:00",
+  "haystack_dates": [
+   "2023/05/01 (Mon) 09:00"
+  ],
+  "haystack_session_ids": [
+   "s3"
+  ],
+  "haystack_sessions": [
+   [
+    {
+     "role": "user",
+     "content": "hi"
+    },
+    {
+     "role": "assistant",
+     "content": "hello"
+    }
+   ]
+  ]
+ },
+ {
+  "question_id": "q004_abs",
+  "question_type": "knowledge-update",
+  "question": "Q4?",
+  "answer": "A4",
+  "question_date": "2023/05/30 (Tue) 10:00",
+  "haystack_dates": [
+   "2023/05/01 (Mon) 09:00"
+  ],
+  "haystack_session_ids": [
+   "s4"
+  ],
+  "haystack_sessions": [
+   [
+    {
+     "role": "user",
+     "content": "hi"
+    },
+    {
+     "role": "assistant",
+     "content": "hello"
+    }
+   ]
+  ]
+ },
+ {
+  "question_id": "q005",
+  "question_type": "temporal-reasoning",
+  "question": "Q5?",
+  "answer": "A5",
+  "question_date": "2023/05/30 (Tue) 10:00",
+  "haystack_dates": [
+   "2023/05/01 (Mon) 09:00"
+  ],
+  "haystack_session_ids": [
+   "s5"
+  ],
+  "haystack_sessions": [
+   [
+    {
+     "role": "user",
+     "content": "hi"
+    },
+    {
+     "role": "assistant",
+     "content": "hello"
+    }
+   ]
+  ]
+ },
+ {
+  "question_id": "q006",
+  "question_type": "single-session-user",
+  "question": "Q6?",
+  "answer": "A6",
+  "question_date": "2023/05/30 (Tue) 10:00",
+  "haystack_dates": [
+   "2023/05/01 (Mon) 09:00"
+  ],
+  "haystack_session_ids": [
+   "s6"
+  ],
+  "haystack_sessions": [
+   [
+    {
+     "role": "user",
+     "content": "hi"
+    },
+    {
+     "role": "assistant",
+     "content": "hello"
+    }
+   ]
+  ]
+ },
+ {
+  "question_id": "q007",
+  "question_type": "single-session-assistant",
+  "question": "Q7?",
+  "answer": "A7",
+  "question_date": "2023/05/30 (Tue) 10:00",
+  "haystack_dates": [
+   "2023/05/01 (Mon) 09:00"
+  ],
+  "haystack_session_ids": [
+   "s7"
+  ],
+  "haystack_sessions": [
+   [
+    {
+     "role": "user",
+     "content": "hi"
+    },
+    {
+     "role": "assistant",
+     "content": "hello"
+    }
+   ]
+  ]
+ },
+ {
+  "question_id": "q008",
+  "question_type": "single-session-preference",
+  "question": "Q8?",
+  "answer": "A8",
+  "question_date": "2023/05/30 (Tue) 10:00",
+  "haystack_dates": [
+   "2023/05/01 (Mon) 09:00"
+  ],
+  "haystack_session_ids": [
+   "s8"
+  ],
+  "haystack_sessions": [
+   [
+    {
+     "role": "user",
+     "content": "hi"
+    },
+    {
+     "role": "assistant",
+     "content": "hello"
+    }
+   ]
+  ]
+ },
+ {
+  "question_id": "q009_abs",
+  "question_type": "multi-session",
+  "question": "Q9?",
+  "answer": "A9",
+  "question_date": "2023/05/30 (Tue) 10:00",
+  "haystack_dates": [
+   "2023/05/01 (Mon) 09:00"
+  ],
+  "haystack_session_ids": [
+   "s9"
+  ],
+  "haystack_sessions": [
+   [
+    {
+     "role": "user",
+     "content": "hi"
+    },
+    {
+     "role": "assistant",
+     "content": "hello"
+    }
+   ]
+  ]
+ },
+ {
+  "question_id": "q010",
+  "question_type": "knowledge-update",
+  "question": "Q10?",
+  "answer": "A10",
+  "question_date": "2023/05/30 (Tue) 10:00",
+  "haystack_dates": [
+   "2023/05/01 (Mon) 09:00"
+  ],
+  "haystack_session_ids": [
+   "s10"
+  ],
+  "haystack_sessions": [
+   [
+    {
+     "role": "user",
+     "content": "hi"
+    },
+    {
+     "role": "assistant",
+     "content": "hello"
+    }
+   ]
+  ]
+ },
+ {
+  "question_id": "q011",
+  "question_type": "temporal-reasoning",
+  "question": "Q11?",
+  "answer": "A11",
+  "question_date": "2023/05/30 (Tue) 10:00",
+  "haystack_dates": [
+   "2023/05/01 (Mon) 09:00"
+  ],
+  "haystack_session_ids": [
+   "s11"
+  ],
+  "haystack_sessions": [
+   [
+    {
+     "role": "user",
+     "content": "hi"
+    },
+    {
+     "role": "assistant",
+     "content": "hello"
+    }
+   ]
+  ]
+ },
+ {
+  "question_id": "q012",
+  "question_type": "single-session-user",
+  "question": "Q12?",
+  "answer": "A12",
+  "question_date": "2023/05/30 (Tue) 10:00",
+  "haystack_dates": [
+   "2023/05/01 (Mon) 09:00"
+  ],
+  "haystack_session_ids": [
+   "s12"
+  ],
+  "haystack_sessions": [
+   [
+    {
+     "role": "user",
+     "content": "hi"
+    },
+    {
+     "role": "assistant",
+     "content": "hello"
+    }
+   ]
+  ]
+ },
+ {
+  "question_id": "q013",
+  "question_type": "single-session-assistant",
+  "question": "Q13?",
+  "answer": "A13",
+  "question_date": "2023/05/30 (Tue) 10:00",
+  "haystack_dates": [
+   "2023/05/01 (Mon) 09:00"
+  ],
+  "haystack_session_ids": [
+   "s13"
+  ],
+  "haystack_sessions": [
+   [
+    {
+     "role": "user",
+     "content": "hi"
+    },
+    {
+     "role": "assistant",
+     "content": "hello"
+    }
+   ]
+  ]
+ },
+ {
+  "question_id": "q014_abs",
+  "question_type": "single-session-preference",
+  "question": "Q14?",
+  "answer": "A14",
+  "question_date": "2023/05/30 (Tue) 10:00",
+  "haystack_dates": [
+   "2023/05/01 (Mon) 09:00"
+  ],
+  "haystack_session_ids": [
+   "s14"
+  ],
+  "haystack_sessions": [
+   [
+    {
+     "role": "user",
+     "content": "hi"
+    },
+    {
+     "role": "assistant",
+     "content": "hello"
+    }
+   ]
+  ]
+ },
+ {
+  "question_id": "q015",
+  "question_type": "multi-session",
+  "question": "Q15?",
+  "answer": "A15",
+  "question_date": "2023/05/30 (Tue) 10:00",
+  "haystack_dates": [
+   "2023/05/01 (Mon) 09:00"
+  ],
+  "haystack_session_ids": [
+   "s15"
+  ],
+  "haystack_sessions": [
+   [
+    {
+     "role": "user",
+     "content": "hi"
+    },
+    {
+     "role": "assistant",
+     "content": "hello"
+    }
+   ]
+  ]
+ },
+ {
+  "question_id": "q016",
+  "question_type": "knowledge-update",
+  "question": "Q16?",
+  "answer": "A16",
+  "question_date": "2023/05/30 (Tue) 10:00",
+  "haystack_dates": [
+   "2023/05/01 (Mon) 09:00"
+  ],
+  "haystack_session_ids": [
+   "s16"
+  ],
+  "haystack_sessions": [
+   [
+    {
+     "role": "user",
+     "content": "hi"
+    },
+    {
+     "role": "assistant",
+     "content": "hello"
+    }
+   ]
+  ]
+ },
+ {
+  "question_id": "q017",
+  "question_type": "temporal-reasoning",
+  "question": "Q17?",
+  "answer": "A17",
+  "question_date": "2023/05/30 (Tue) 10:00",
+  "haystack_dates": [
+   "2023/05/01 (Mon) 09:00"
+  ],
+  "haystack_session_ids": [
+   "s17"
+  ],
+  "haystack_sessions": [
+   [
+    {
+     "role": "user",
+     "content": "hi"
+    },
+    {
+     "role": "assistant",
+     "content": "hello"
+    }
+   ]
+  ]
+ },
+ {
+  "question_id": "q018",
+  "question_type": "single-session-user",
+  "question": "Q18?",
+  "answer": "A18",
+  "question_date": "2023/05/30 (Tue) 10:00",
+  "haystack_dates": [
+   "2023/05/01 (Mon) 09:00"
+  ],
+  "haystack_session_ids": [
+   "s18"
+  ],
+  "haystack_sessions": [
+   [
+    {
+     "role": "user",
+     "content": "hi"
+    },
+    {
+     "role": "assistant",
+     "content": "hello"
+    }
+   ]
+  ]
+ },
+ {
+  "question_id": "q019_abs",
+  "question_type": "single-session-assistant",
+  "question": "Q19?",
+  "answer": "A19",
+  "question_date": "2023/05/30 (Tue) 10:00",
+  "haystack_dates": [
+   "2023/05/01 (Mon) 09:00"
+  ],
+  "haystack_session_ids": [
+   "s19"
+  ],
+  "haystack_sessions": [
+   [
+    {
+     "role": "user",
+     "content": "hi"
+    },
+    {
+     "role": "assistant",
+     "content": "hello"
+    }
+   ]
+  ]
+ },
+ {
+  "question_id": "q020",
+  "question_type": "single-session-preference",
+  "question": "Q20?",
+  "answer": "A20",
+  "question_date": "2023/05/30 (Tue) 10:00",
+  "haystack_dates": [
+   "2023/05/01 (Mon) 09:00"
+  ],
+  "haystack_session_ids": [
+   "s20"
+  ],
+  "haystack_sessions": [
+   [
+    {
+     "role": "user",
+     "content": "hi"
+    },
+    {
+     "role": "assistant",
+     "content": "hello"
+    }
+   ]
+  ]
+ },
+ {
+  "question_id": "q021",
+  "question_type": "multi-session",
+  "question": "Q21?",
+  "answer": "A21",
+  "question_date": "2023/05/30 (Tue) 10:00",
+  "haystack_dates": [
+   "2023/05/01 (Mon) 09:00"
+  ],
+  "haystack_session_ids": [
+   "s21"
+  ],
+  "haystack_sessions": [
+   [
+    {
+     "role": "user",
+     "content": "hi"
+    },
+    {
+     "role": "assistant",
+     "content": "hello"
+    }
+   ]
+  ]
+ },
+ {
+  "question_id": "q022",
+  "question_type": "knowledge-update",
+  "question": "Q22?",
+  "answer": "A22",
+  "question_date": "2023/05/30 (Tue) 10:00",
+  "haystack_dates": [
+   "2023/05/01 (Mon) 09:00"
+  ],
+  "haystack_session_ids": [
+   "s22"
+  ],
+  "haystack_sessions": [
+   [
+    {
+     "role": "user",
+     "content": "hi"
+    },
+    {
+     "role": "assistant",
+     "content": "hello"
+    }
+   ]
+  ]
+ },
+ {
+  "question_id": "q023",
+  "question_type": "temporal-reasoning",
+  "question": "Q23?",
+  "answer": "A23",
+  "question_date": "2023/05/30 (Tue) 10:00",
+  "haystack_dates": [
+   "2023/05/01 (Mon) 09:00"
+  ],
+  "haystack_session_ids": [
+   "s23"
+  ],
+  "haystack_sessions": [
+   [
+    {
+     "role": "user",
+     "content": "hi"
+    },
+    {
+     "role": "assistant",
+     "content": "hello"
+    }
+   ]
+  ]
+ },
+ {
+  "question_id": "q024_abs",
+  "question_type": "single-session-user",
+  "question": "Q24?",
+  "answer": "A24",
+  "question_date": "2023/05/30 (Tue) 10:00",
+  "haystack_dates": [
+   "2023/05/01 (Mon) 09:00"
+  ],
+  "haystack_session_ids": [
+   "s24"
+  ],
+  "haystack_sessions": [
+   [
+    {
+     "role": "user",
+     "content": "hi"
+    },
+    {
+     "role": "assistant",
+     "content": "hello"
+    }
+   ]
+  ]
+ }
+]
