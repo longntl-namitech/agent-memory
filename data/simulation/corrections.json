@@ -1,0 +1,7 @@
+[
+  {"id": "vat", "rule": "Always quote prices without VAT and say so, for example \"1,200 USD excl. VAT\".", "active_from_task": 5},
+  {"id": "sign_off", "rule": "End every email with the exact sign-off \"Best regards, Sam from Brightpath\".", "active_from_task": 8},
+  {"id": "closed_deals", "rule": "Do not follow up on leads whose deal status is closed. Answer exactly SKIP.", "active_from_task": 14},
+  {"id": "under_90_words", "rule": "Keep every email under 90 words.", "active_from_task": 17},
+  {"id": "booking_link", "rule": "Use the new booking link https://cal.brightpath.example/sam-v2 in every email. The old link is retired.", "active_from_task": 20}
+]
