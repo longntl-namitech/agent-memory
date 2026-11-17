@@ -1,0 +1,29 @@
+[project]
+name = "agent-memory"
+version = "0.1.0"
+description = "Memory methods for LLM agents, runnable and measured on simulated and public data"
+readme = "README.md"
+authors = [
+    { name = "Nguyễn Thành Long", email = "long.itptit@gmail.com" }
+]
+license = "MIT"
+requires-python = ">=3.11"
+dependencies = [
+    "numpy>=1.26",
+    "openai>=1.50",
+]
+
+[project.optional-dependencies]
+fastembed = ["fastembed>=0.8"]
+
+[build-system]
+requires = ["uv_build>=0.11.19,<0.12.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
