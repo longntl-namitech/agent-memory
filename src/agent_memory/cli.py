@@ -79,7 +79,8 @@ def _results_path(results_dir: Path, name: str) -> Path:
     return results_dir / f"simulation_{name}.md"
 
 
-def _run_simulation(name: str, llm: LLMClient, store_dir: Path, results_dir: Path) -> SimulationAborted | None:
+def _run_simulation(name: str, llm: LLMClient, store_dir: Path, results_dir: Path,
+                    per_config_cap: int = PER_CONFIG_CAP) -> SimulationAborted | None:
     """Run one config and write its result; returns the abort, or None when it finished."""
     cfg = load_config(CONFIGS / f"{name}.toml")
     corrections = json.loads((DATA / "corrections.json").read_text(encoding="utf-8"))
@@ -91,7 +92,7 @@ def _run_simulation(name: str, llm: LLMClient, store_dir: Path, results_dir: Pat
     agent = build(cfg, llm=llm, store=store, check=sim_check(corrections),
                   **({"embedder": embedder} if embedder else {}))
     before = llm.budget.used
-    extra, aborted = {"llm_cache": CACHE_NOTE}, None
+    extra, aborted = {"llm_cache": CACHE_NOTE, "per_config_cap": per_config_cap}, None
     try:
         metrics = run_simulation(agent, tasks, SimClock(SIM_START), Reviewer([blocklist["marker"]]),
                                  store=store, corrections=corrections, blocklist=blocklist)
@@ -121,11 +122,13 @@ def _lme_results_path(results_dir: Path, name: str) -> Path:
     return results_dir / f"longmemeval_{name}.md"
 
 
-def _run_lme(args, names: list[str], est) -> int:
-    """LongMemEval: one shared budget of --max-tokens; a failed config writes a PARTIAL result and stops the run."""
-    if est.needs_subset and not args.confirm_full:
-        print(f"refused: estimate above {SUBSET_THRESHOLD:,}. Run a subset under {SUBSET_LIMIT:,} first "
-              f"(--questions 8), then ask before the full set and pass --confirm-full", file=sys.stderr)
+def _run_lme(args, names: list[str], est, full) -> int:
+    """LongMemEval: one shared budget of --max-tokens; a failed config writes a PARTIAL result and stops the run.
+    `full` is the estimate of the same configs on the full set (all questions)."""
+    if not args.confirm_full and (est.needs_subset or (full.needs_subset and est.total > SUBSET_LIMIT)):
+        print(f"refused: the full set is estimated at {full.total:,} (above {SUBSET_THRESHOLD:,}) and this run at "
+              f"{est.total:,}. Run a subset under {SUBSET_LIMIT:,} first (fewer --questions or configs), then ask "
+              f"before a larger run and pass --confirm-full", file=sys.stderr)
         return 2
     if args.max_tokens is None:
         print("refused: --no-estimate-only needs --max-tokens (the run's total token cap)", file=sys.stderr)
@@ -204,6 +207,7 @@ def _run(args, parser) -> int:
     print(f"above {SUBSET_THRESHOLD:,}: {'yes' if est.needs_subset else 'no'}")
     if args.eval == "simulation":
         print("note: the simulation per-task numbers are a placeholder (2,000 prompt + 500 completion per task)")
+        print(f"per-config cap: {args.per_config_cap:,}")
     else:
         print(LME_NOTE)
     try:
@@ -215,7 +219,7 @@ def _run(args, parser) -> int:
         print(f"refused: {exc}", file=sys.stderr)
         return 2
     if args.eval == "longmemeval":
-        return _run_lme(args, names, est)
+        return _run_lme(args, names, est, estimate(args.eval, names, None, args.full_context_questions, stages))
     if est.needs_subset:
         print(f"refused: estimate above {SUBSET_THRESHOLD:,}, run a subset first", file=sys.stderr)
         return 2
@@ -235,8 +239,8 @@ def _run(args, parser) -> int:
 
     remaining, code = args.max_tokens, 0
     for i, n in enumerate(names):
-        budget = TokenBudget(min(PER_CONFIG_CAP, remaining))
-        aborted = _run_simulation(n, make_llm(budget), out / n, args.results_dir)
+        budget = TokenBudget(min(args.per_config_cap, remaining))
+        aborted = _run_simulation(n, make_llm(budget), out / n, args.results_dir, args.per_config_cap)
         remaining -= budget.used
         if aborted is None:
             continue
@@ -262,11 +266,14 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--configs", required=True, help="comma-separated config names from configs/")
     run.add_argument("--estimate-only", action=argparse.BooleanOptionalAction, default=True)
     run.add_argument("--max-tokens", type=int, help=(
-        f"required with --no-estimate-only: the run's total token cap. Each config also gets its own cap of "
-        f"min({PER_CONFIG_CAP:,}, what is left of the total). A config that hits its cap writes a PARTIAL result "
-        f"and the run goes on with the next config; the run stops once the total is spent or a config "
-        f"crashes for any other reason. Any partial result makes the exit code 1. On longmemeval the cap is one "
-        f"budget shared by all configs, and the first config that hits it writes a PARTIAL result and ends the run."))
+        "required with --no-estimate-only: the run's total token cap. Each config also gets its own cap of "
+        "min(--per-config-cap, what is left of the total). A config that hits its cap writes a PARTIAL result "
+        "and the run goes on with the next config; the run stops once the total is spent or a config "
+        "crashes for any other reason. Any partial result makes the exit code 1. On longmemeval the cap is one "
+        "budget shared by all configs, and the first config that hits it writes a PARTIAL result and ends the run."))
+    run.add_argument("--per-config-cap", type=_positive, default=PER_CONFIG_CAP, help=(
+        f"simulation: each config's own token cap (default {PER_CONFIG_CAP:,}, the spec's limit). Raising it is a "
+        "decision to take after a pilot run shows a config needs more"))
     run.add_argument("--questions", type=_positive, help=(
         "longmemeval: run only the first N selected questions, stratified evenly over the abilities "
         "(e.g. 8 for the subset run under 1,000,000 tokens)"))
@@ -275,8 +282,9 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--download", action="store_true",
                      help="longmemeval: download the dataset into .cache/ if it is missing (the only network fetch)")
     run.add_argument("--confirm-full", action="store_true", help=(
-        "longmemeval: allow a run whose estimate is above 5,000,000. Global rule: run a subset under "
-        "1,000,000 first (--questions), then ask the user before the full set"))
+        "longmemeval: when the full set (50 questions) is estimated above 5,000,000, a run estimated above "
+        "1,000,000 is refused without this flag. Global rule: run a subset under 1,000,000 first (--questions), "
+        "then ask the user before a larger run"))
     run.add_argument("--overwrite", action="store_true", help="replace existing results files")
     run.add_argument("--out", type=Path, help="where the per-config stores go (default: a temp dir)")
     run.add_argument("--results-dir", type=Path, default=Path("results"))

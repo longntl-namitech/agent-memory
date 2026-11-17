@@ -330,6 +330,32 @@ def test_cli_lme_refuses_full_set_without_confirm(monkeypatch, tmp_path, capsys)
     assert "--questions" in err and "--confirm-full" in err
 
 
+LME_ALL = ",".join(sorted(p.stem for p in cli.CONFIGS.glob("lme_*.toml")))
+
+
+def test_cli_lme_subset_above_1m_refused_when_full_set_above_5m(monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr(cli, "make_llm", no_llm)
+    seed_cache(tmp_path, monkeypatch)
+    assert cli.main(lme_args(tmp_path, LME_ALL, "--questions", "8", "--max-tokens", "3000000")) == 2
+    err = capsys.readouterr().err
+    full = cli.estimate("longmemeval", LME_ALL.split(","), None, 10,
+                        {n: cli.load_config(cli.CONFIGS / f"{n}.toml").memory
+                         or cli.load_config(cli.CONFIGS / f"{n}.toml").write for n in LME_ALL.split(",")})
+    assert "2,003,200" in err and f"{full.total:,}" in err and "--confirm-full" in err
+    assert not (tmp_path / "results").exists()
+
+
+def test_cli_lme_subset_above_1m_allowed_with_confirm_full(monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr(cli, "make_llm", no_llm)
+    seed_cache(tmp_path, monkeypatch)
+    target = tmp_path / "results" / "longmemeval_lme_full.md"
+    target.parent.mkdir()
+    target.write_text("done")  # the next guard refuses, proving the subset guard let it through
+    assert cli.main(lme_args(tmp_path, LME_ALL, "--questions", "8", "--max-tokens", "3000000",
+                             "--confirm-full")) == 2
+    assert str(target) in capsys.readouterr().err
+
+
 def test_cli_lme_requires_max_tokens(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(cli, "make_llm", no_llm)
     seed_cache(tmp_path, monkeypatch)
@@ -357,7 +383,7 @@ def test_cli_lme_run_writes_result(monkeypatch, tmp_path):
     seed_cache(tmp_path, monkeypatch)
     monkeypatch.setattr(cli, "make_llm", lambda budget: counting_llm(tmp_path, budget=budget))
     assert cli.main(lme_args(tmp_path, "lme_baseline_full_context,lme_b1_write_filter", "--questions", "8",
-                             "--full-context-questions", "5", "--max-tokens", "2000000")) == 0
+                             "--full-context-questions", "5", "--max-tokens", "2000000", "--confirm-full")) == 0
     fc = (tmp_path / "results" / "longmemeval_lme_baseline_full_context.md").read_text()
     b1 = (tmp_path / "results" / "longmemeval_lme_b1_write_filter.md").read_text()
     assert "# longmemeval - lme_baseline_full_context" in fc and "PARTIAL" not in fc

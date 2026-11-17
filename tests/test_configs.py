@@ -87,6 +87,7 @@ def test_estimate_only_is_default_and_calls_no_llm(monkeypatch, capsys):
     assert "full: 100000" in out and "total: 1400000" in out
     assert "above 5,000,000: no" in out and "placeholder" in out
     assert "estimate only, nothing was run" in out
+    assert "per-config cap: 100,000" in out
 
 
 def test_unknown_config_lists_available(capsys):
@@ -131,6 +132,7 @@ def test_run_writes_result_with_stub_llm(monkeypatch, tmp_path):
     assert reflexion > 0 and "- write_filter_fallbacks: " in text and "- write_filter_dropped_rules: " in text and "- reflect_failures: " in text
     assert "week 4" in text
     assert "- llm_cache: shared across configs" in text
+    assert "- per_config_cap: 100000" in text
 
 
 def test_budget_blown_mid_run_writes_partial(monkeypatch, tmp_path):
@@ -209,3 +211,22 @@ def test_run_stops_when_run_budget_spent(monkeypatch, tmp_path):
     assert built[1].max_tokens == 150_000 - built[0].used  # the remainder, below the per-config cap
     assert len(built) == 2
     assert not (tmp_path / "results" / "simulation_b1_write_filter.md").exists()
+
+
+def test_larger_per_config_cap_lets_heavy_config_finish(monkeypatch, tmp_path):
+    make, built = costly_then_cheap(tmp_path, [20_000])
+    monkeypatch.setattr(cli, "make_llm", make)
+    code = cli.main(run_args(tmp_path, "baseline_full_context", "--max-tokens", "10000000",
+                             "--per-config-cap", "5000000"))
+    assert code == 0
+    assert built[0].max_tokens == 5_000_000 and built[0].used > cli.PER_CONFIG_CAP
+    text = (tmp_path / "results" / "simulation_baseline_full_context.md").read_text()
+    assert not text.startswith("PARTIAL") and "- per_config_cap: 5000000" in text
+
+
+@pytest.mark.parametrize("n", ["0", "-5"])
+def test_per_config_cap_must_be_positive(monkeypatch, capsys, n):
+    monkeypatch.setattr(cli, "make_llm", no_llm)
+    with pytest.raises(SystemExit) as exc:
+        cli.main(["run", "--eval", "simulation", "--configs", "full", "--per-config-cap", n])
+    assert exc.value.code == 2 and "--per-config-cap" in capsys.readouterr().err
