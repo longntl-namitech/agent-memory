@@ -95,3 +95,19 @@ def test_importance_clamped():
     q, v = np.array([1.0, 0.0]), np.array([1.0, 0.0])
     assert score(e("a", imp=50), q, v, NOW) == pytest.approx(3.0)
     assert score(e("a", imp=-3), q, v, NOW) == pytest.approx(2.1)
+
+
+def test_embedder_property_injects(tmp_path, monkeypatch):
+    monkeypatch.delenv("EMBEDDING_BASE_URL", raising=False)
+    monkeypatch.delenv("EMBEDDING_MODEL", raising=False)
+    s = Store(tmp_path)
+    x = e("a", text="cos=0.5 alpha")
+    s.add(x)
+    emb = Fake()
+    st = ScoredRecall()
+    assert st.embedder is None
+    st.embedder = emb
+    assert st.embedder is emb
+    out = st.recall(task(), s, NOW, lambda store, t: Routed(rules=[], facts=[x], log=[]))
+    assert emb.calls
+    assert "cos=0.5 alpha" in out

@@ -38,6 +38,14 @@ class ScoredRecall:
         self._embedder = embedder
         self._vecs: dict[tuple[str, str], np.ndarray] = {}
 
+    @property
+    def embedder(self) -> Embedder | None:
+        return self._embedder
+
+    @embedder.setter
+    def embedder(self, value: Embedder | None) -> None:
+        self._embedder = value
+
     def recall(self, task: Task, store: Store, now: datetime, route: Route) -> str:
         r = route(store, task)
         rest = [*r.facts, *r.log]
