@@ -9,8 +9,11 @@ Forget stage (`[forget] stages = ["archive"]`). Rules not fired in 30 days leave
 
 ## When this fires
 
-The simulation spans 4 weeks (28 days), below the 30-day threshold, so `archive` cannot fire at all in it. It does not run on LongMemEval.
+The simulation spans 4 weeks (28 days), below the 30-day threshold, so `archive` cannot fire there. It does not run on LongMemEval.
 
-Beyond that, every recall stage renders all active rules each task and touches them, so a rule that is always loaded never ages out. With recall stages that always render RULES, `archive` only fires for rules a recall stage does not render, for example configs with no recall stage, or a rule the route excluded.
+In longer runs it only fires for rules that no recall stage renders, which happens:
+
+- in configs with no recall stage;
+- with `pool_route` plus `scored_recall`, when a rule scores below the top 8 (`TOP_K = 8`): it is neither rendered nor touched.
 
 Constants: `ARCHIVE_AFTER_DAYS = 30` in `stage.py`.

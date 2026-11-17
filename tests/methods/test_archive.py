@@ -61,3 +61,10 @@ def test_use_resets_clock(tmp_path):
     TagRecall().recall(Task(id=1, week=1, day=1, lead={}, tags=[], wants_log=False), s, NOW, CoalaStores())
     Archive().forget(s, NOW + timedelta(days=2))
     assert ids(s.rules()) == ["r"]
+
+
+def test_rule_used_after_now_not_archived(tmp_path):
+    s = Store(tmp_path)
+    s.add(ent("r", used=NOW + timedelta(days=5)))
+    Archive().forget(s, NOW)
+    assert ids(s.rules()) == ["r"]
