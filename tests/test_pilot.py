@@ -26,8 +26,14 @@ def args(tmp_path, *extra):
     return ["pilot", "--results-dir", str(tmp_path / "results"), *extra]
 
 
-def no_profiles(home) -> bool:
-    return not list((home / "profiles").glob("*")) if (home / "profiles").exists() else True
+def no_run_state(home) -> bool:
+    """No memory, session or log content left in the Hermes data root, and no named profile."""
+    left = ["memories", "sessions", "state.db", "logs", "workspace", "usage.json", "profiles"]
+    return not any((home / n).exists() for n in left)
+
+
+def log_calls(log) -> list[list[str]]:
+    return [rec.split("\x1f")[:-1] for rec in log.read_text(encoding="utf-8").split("\x1e") if rec]
 
 
 def test_extrapolation():
@@ -41,9 +47,12 @@ def test_extrapolation_rounds_mean():
 
 
 def test_run_prints_table_and_extrapolation(monkeypatch, tmp_path, capsys):
-    home, _ = setup(monkeypatch, tmp_path, FAKE_HERMES_OUTPUT="one two three")
+    home, log = setup(monkeypatch, tmp_path, FAKE_HERMES_OUTPUT="one two three")
     assert cli.main(args(tmp_path, "--run", "--max-tokens", "50000")) == 0
     out = capsys.readouterr().out
+    calls = log_calls(log)
+    assert calls[-1] == ["gateway", "stop"] and not any("-p" in c or "profile" in c for c in calls)
+    assert "6,301 tokens" in out and "--per-config-cap" in out
     assert "task, tokens, words, failed" in out and "0, 1000, 3, no" in out and "2, 1000, 3, no" in out
     assert "mean tokens per task: 1000" in out and "40,000 per run" in out
     assert "240,000" in out and "6 runs = 2 configs x 3 runs" in out and "80,000" in out
@@ -53,9 +62,9 @@ def test_run_prints_table_and_extrapolation(monkeypatch, tmp_path, capsys):
     assert "- hermes_version: 0.23.2" in text and "- mean_tokens_per_task: 1000" in text
     assert "- reproducibility: not cache-reproducible" in text and "- tokens: 3000" in text
     assert "one two three" not in text
-    for needle in ("biased downward", "hermes_no_memory", "overshoot it"):
+    for needle in ("biased downward", "hermes_no_memory", "overshoot it", "6,301 tokens"):
         assert needle in out and needle in text
-    assert no_profiles(home)
+    assert no_run_state(home)
 
 
 def test_dry_run_calls_nothing(monkeypatch, tmp_path, capsys):
@@ -63,6 +72,7 @@ def test_dry_run_calls_nothing(monkeypatch, tmp_path, capsys):
     assert cli.main(args(tmp_path)) == 0
     out = capsys.readouterr().out
     assert "dry run" in out and "OPENAI_API_KEY" in out and "gpt-5.4-nano" in out and SECRET not in out
+    assert "HERMES_HOME=" in out and " -p " not in out
     assert not log.exists() and not home.exists() and not (tmp_path / "results").exists()
 
 
@@ -87,7 +97,7 @@ def test_tasks_out_of_range_rejected(monkeypatch, tmp_path, n):
     assert e.value.code == 2 and not log.exists()
 
 
-def test_budget_stop_prints_partial_and_deletes_profile(monkeypatch, tmp_path, capsys):
+def test_budget_stop_prints_partial_and_leaves_no_run_state(monkeypatch, tmp_path, capsys):
     home, _ = setup(monkeypatch, tmp_path)
     assert cli.main(args(tmp_path, "--run", "--max-tokens", "1500")) == 1
     out = capsys.readouterr().out
@@ -95,7 +105,7 @@ def test_budget_stop_prints_partial_and_deletes_profile(monkeypatch, tmp_path, c
     assert "overshoot: 500 tokens over the cap" in out
     text = (tmp_path / "results" / "pilot_hermes_default.md").read_text()
     assert "PARTIAL" in text and "- budget_overshoot: 500" in text
-    assert no_profiles(home)
+    assert no_run_state(home)
 
 
 def test_no_key_value_in_output_or_results(monkeypatch, tmp_path, capsys):
@@ -115,9 +125,9 @@ def test_overwrite_guard(monkeypatch, tmp_path, capsys):
     assert cli.main([*run, "--overwrite"]) == 0
 
 
-def test_hermes_crash_exits_1_without_result_or_profile(monkeypatch, tmp_path, capsys):
+def test_hermes_crash_exits_1_without_result_or_run_state(monkeypatch, tmp_path, capsys):
     home, _ = setup(monkeypatch, tmp_path, FAKE_HERMES_EXIT="130")
     assert cli.main(args(tmp_path, "--run", "--max-tokens", "50000")) == 1
     captured = capsys.readouterr()
     assert "pilot crashed" in captured.err and "130" in captured.err
-    assert not (tmp_path / "results").exists() and no_profiles(home)
+    assert not (tmp_path / "results").exists() and no_run_state(home)

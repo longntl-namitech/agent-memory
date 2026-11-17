@@ -19,3 +19,4 @@ profiles/
 .ruff_cache/
 .superpowers/
 .hermes-home/
+.hermes-lab/

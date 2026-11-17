@@ -2,7 +2,7 @@ name = "hermes_default"
 agent = "hermes"
 
 [hermes]
-profile_root = ".hermes-home"  # the isolated HERMES_HOME; a throwaway profile is made in it per run
+profile_root = ".hermes-lab/hermes_default"  # this config's own Hermes data root (HERMES_HOME), reused across runs
 binary = "hermes"
 model = "gpt-5.4-nano"
 memory_enabled = true

@@ -7,6 +7,43 @@ isolated home `.hermes-home/` (always `export HERMES_HOME=<repo>/.hermes-home` f
 deleting one throwaway profile (`hermes profile create tmpcheck`, `hermes profile delete tmpcheck -y`).
 `~/.hermes` does not exist before or after.
 
+## Findings from the first real calls
+
+The first real `hermes -z` calls (gpt-5.4-nano through api.openai.com, key read into an environment variable only,
+never printed or written) changed the adapter design. Facts:
+
+1. **A named profile does not authenticate.** `-p NAME` (made by `hermes profile create`) is served through an
+   auto-started gateway that never sees the calling process environment and reads keys only from the profile
+   `.env` ("No API key for the custom endpoint ... not set for this profile"). The call exits 2 and writes a
+   usage file whose token fields are `null`.
+2. **A dedicated data root works.** `HERMES_HOME=<dir>` with a `config.yaml` we write (`model.default`,
+   `provider: custom`, `base_url`, `key_env`, `agent.max_turns`, `memory.memory_enabled`,
+   `memory.user_profile_enabled`), no `-p`, run as
+   `hermes -z PROMPT --usage-file PATH --provider custom -m MODEL -t memory,file,skills,todo`: exit 0, the answer
+   on stdout, a usage JSON with real numbers (`input_tokens` 6270, `output_tokens` 31, `total_tokens` 6301,
+   `api_calls` 1, `completed` true, `failed` false, plus an `auxiliary` block), and the key read from the process
+   environment only (nothing on disk).
+3. **A new data root bootstraps its own runtime on first use** ("Preparing the isolated Hermes runtime...
+   Installing Python dependencies", about 690 MB: `installs/` about 420 MB, `cache/` about 267 MB, slow). The data
+   root must be reused across runs, not recreated per run.
+4. **A call may auto-start a background gateway** (it exits after 600 s idle). Stop it with `hermes gateway stop`
+   under the same `HERMES_HOME` (`hermes_cli/subcommands/gateway.py:181`).
+
+Verified by these calls: the real usage JSON shape; exit 2 with null usage on a missing key; the key via the
+environment works with a dedicated data root; `-t` accepted; `--provider custom` accepted. Still UNVERIFIED: exit
+codes 1 and 130 in practice, `memory_enabled: false` removing the memory tool, a `memory` tool write by the model.
+
+The adapter now uses one dedicated data root per config (`.hermes-lab/<config>`), no `-p`, no
+`hermes profile create/delete`. The run state it wipes at start and at close, as paths under `$HERMES_HOME`, each
+from the v0.23.2 sources: `memories/` (`tools/memory_tool.py:40`, MEMORY.md and USER.md), `sessions/`
+(`hermes_state.py:452`, transcripts `sessions/<id>.jsonl`), `state.db*` (`hermes_state.py:184`, the session
+database plus its `-wal` and `-shm` files), `checkpoints/` (`tools/checkpoint_manager.py:78`), `logs/`
+(`agent.log` and others), `pending_messages/` (`gateway/shutdown_flush.py:47`), `response_store.db*`
+(`gateway/platforms/api_server_response_store.py:61`), plus the adapter's own `workspace/` (the cwd of each call)
+and `usage.json`. The runtime (`installs/`, `cache/`, the checkout and the rest) is kept.
+
+The sections below are the Task 22 check, written for the named-profile design; the profile parts are superseded.
+
 ## Loud findings (these change the design)
 
 1. **DIFFERS, breaks the plan as written: `--ignore-user-config` also drops the profile's `config.yaml`
@@ -54,7 +91,7 @@ Verdict: OK / DIFFERS / MISSING. "Ran" is a command; other entries are file:line
 | `memory` tool actions | yes | `add`, `patch`, `remove` (plus a batch form); `target` is `memory` or `user`; `patch` and `remove` need `old_text` | `tools/memory_tool.py:406-418,150` | OK |
 | `-z` exit codes | yes | 0 completed, 2 failed/partial/`completed: False` (e.g. iteration budget), 130 interrupted, 1 completed with empty text | `hermes_cli/oneshot.py:83-101` | OK (as the spec says) |
 
-## Profiles and directory layout
+## Profiles and directory layout (named profiles no longer used)
 
 - `-p NAME` does NOT auto-create. For a missing profile it prints
   `Error: Profile 'nosuch' does not exist. Create it with: hermes profile create nosuch`
@@ -103,7 +140,7 @@ memory:
   `HOME` is not used for config when HERMES_HOME is set; the profile has its own `home/` dir for tool subprocesses.
   A different `HOME` is therefore expected to change nothing. UNVERIFIED at runtime; no reason to override it.
 
-## How the adapter should call it
+## How the adapter should call it (superseded: dedicated data root, see the findings above)
 
 One task, one fresh profile, name unique per run (lowercase alphanumeric), e.g. `lab<runid>`. Same env for all steps:
 `HERMES_HOME=<repo>/.hermes-home`, `LAB_LLM_API_KEY=<from the lab's own env>`.
@@ -143,10 +180,13 @@ accounting use `total_including_auxiliary.total_tokens`, because auxiliary calls
 
 ## Unverified until the pilot (T24)
 
-- The custom endpoint and `key_env` actually authenticate against the `gpt-5.4-nano` endpoint.
-- The usage file is written by `hermes -z` with a profile and has the keys above; auxiliary block shape.
-- Real exit codes for a budget stop (`agent.max_turns`) and for an empty reply.
+- VERIFIED (first real calls): the custom endpoint and `key_env` authenticate with a dedicated data root (not with
+  a named profile).
+- VERIFIED (first real calls): the usage file is written by `hermes -z` and has the keys above, including on a
+  failed call (token fields `null`).
+- Real exit codes for a budget stop (`agent.max_turns`) and for an empty reply (1), and for an interrupt (130).
 - `memory_enabled: false` really removes the `memory` tool and the MEMORY.md block from the system prompt
   (code reads the flag at `memory_tool.py:305-309`; not exercised).
-- `-t memory,file,skills,todo` leaves no terminal access (toolset definitions read, not run).
+- `-t memory,file,skills,todo` leaves no terminal access (the flag is accepted; toolset contents read, not run).
+- A `memory` tool write (`add`, `patch`) made by the model in a real run.
 - That the `hermes pm repair` notice does not block a real run.

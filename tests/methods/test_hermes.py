@@ -1,5 +1,6 @@
 """HermesAgent against tests/fixtures/fake_hermes.sh: no real Hermes, no model, no network."""
 
+import contextlib
 import json
 from datetime import datetime
 from pathlib import Path
@@ -29,7 +30,8 @@ def home(tmp_path):
 
 def make(home, tmp_path, memory_enabled=True, **env):
     log = tmp_path / "argv.log"
-    base = {"HOME": str(tmp_path / "fake-home"), "FAKE_HERMES_LOG": str(log), "LAB_KEY": SENTINEL}
+    base = {"HOME": str(tmp_path / "fake-home"), "FAKE_HERMES_LOG": str(log),
+            "FAKE_HERMES_HOME_LOG": str(tmp_path / "home.log"), "LAB_KEY": SENTINEL}
     return HermesAgent(home, "gpt-5.4-nano", memory_enabled, binary=FAKE, base_url="https://llm.example/v1",
                        key_env="LAB_KEY", max_turns=7, timeout=10, env={**base, **env})
 
@@ -43,54 +45,111 @@ def runs(tmp_path) -> list[list[str]]:
     return [c for c in calls(tmp_path) if "-z" in c]
 
 
-def profiles(home) -> list[Path]:
-    return list((home / "profiles").glob("*")) if (home / "profiles").exists() else []
+RUN_STATE = ["memories", "sessions", "state.db", "state.db-wal", "state.db-shm", "logs", "checkpoints",
+             "pending_messages", "response_store.db", "workspace", "usage.json"]
+
+
+def run_state(home) -> list[str]:
+    """Run state (memory, sessions, transcripts, logs) left in the data root."""
+    return [n for n in RUN_STATE if (home / n).exists()]
+
+
+def scan(root: Path, needle: str) -> list[Path]:
+    return [p for p in root.rglob("*") if p.is_file() and needle in p.read_text(errors="ignore")]
 
 
 def test_command_flags(home, tmp_path):
     with make(home, tmp_path) as agent:
         agent.run_task(TASK, NOW)
     argv = runs(tmp_path)[0]
-    assert argv[:2] == ["-p", agent.name]
-    for flag in ("-z", "--usage-file", "-m", "-t"):
+    assert argv[0] == "-z"
+    for flag in ("--usage-file", "-m", "-t"):
         assert flag in argv
+    assert argv[argv.index("--provider") + 1] == "custom"
     assert argv[argv.index("-m") + 1] == "gpt-5.4-nano"
     toolsets = argv[argv.index("-t") + 1].split(",")
     assert "memory" in toolsets and "terminal" not in toolsets
-    assert "--ignore-rules" not in argv and "--ignore-user-config" not in argv
-    create = calls(tmp_path)[0]
-    assert create == ["profile", "create", agent.name, "--no-alias", "--no-skills", "--no-credentials"]
+    every = [a for c in calls(tmp_path) for a in c]
+    for banned in ("-p", "--profile", "profile", "--ignore-rules", "--ignore-user-config"):
+        assert banned not in every
 
 
-def test_profile_created_and_deleted(home, tmp_path):
+def test_hermes_home_is_the_dedicated_data_root(home, tmp_path):
+    with make(home, tmp_path) as agent:
+        agent.version()
+        agent.run_task(TASK, NOW)
+        config = (home / "config.yaml").read_text()
+        assert "max_turns: 7" in config and "provider: custom" in config and 'key_env: "LAB_KEY"' in config
+        assert 'default: "gpt-5.4-nano"' in config and 'base_url: "https://llm.example/v1"' in config
+        assert agent.memory_path == home.resolve() / "memories" / "MEMORY.md"
+    seen = (tmp_path / "home.log").read_text().splitlines()
+    assert len(seen) == len(calls(tmp_path)) >= 3 and set(seen) == {str(home.resolve())}
+    assert not (home / "profiles").exists()
+
+
+def test_gateway_stopped_on_close(home, tmp_path):
     with make(home, tmp_path) as agent:
         agent.run_task(TASK, NOW)
-        assert agent.profile_dir.is_dir()
-        config = (agent.profile_dir / "config.yaml").read_text()
-        assert "max_turns: 7" in config and "provider: custom" in config and "key_env: \"LAB_KEY\"" in config
-    assert profiles(home) == []
-    assert ["profile", "delete", agent.name, "-y"] in calls(tmp_path)
+        assert "running" in (home / "gateway_state.json").read_text()
+    assert calls(tmp_path)[-1] == ["gateway", "stop"]
+    assert "stopped" in (home / "gateway_state.json").read_text()
 
 
-def test_profile_deleted_after_failed_attempt(home, tmp_path):
-    with make(home, tmp_path, FAKE_HERMES_EXIT="2") as agent:
+@pytest.mark.parametrize("env", [{"FAKE_HERMES_GATEWAY_EXIT": "1"}, {"FAKE_HERMES_GATEWAY_SLEEP": "5"}])
+def test_gateway_stop_failure_or_timeout_is_ignored(home, tmp_path, env):
+    agent = make(home, tmp_path, FAKE_HERMES_MEMORY_ADD="Prices go excl. VAT.", **env)
+    agent.timeout = 2
+    with agent:
         agent.run_task(TASK, NOW)
-    assert profiles(home) == []
+    assert ["gateway", "stop"] in calls(tmp_path) and run_state(home) == []
 
 
-def test_profile_deleted_after_raised_error(home, tmp_path):
-    with pytest.raises(HermesError):
-        with make(home, tmp_path, FAKE_HERMES_EXIT="130") as agent:
+def test_reset_wipes_memory_between_runs_and_keeps_runtime(home, tmp_path):
+    with make(home, tmp_path, FAKE_HERMES_MEMORY_ADD="Prices go excl. VAT.") as agent:
+        agent.plant_rule("Always sign off as Sam.")
+        agent.run_task(TASK, NOW)
+        assert agent.memory_entries() == ["Always sign off as Sam.", "Prices go excl. VAT."]
+        assert (home / "sessions").is_dir() and (home / "state.db").exists()
+    assert run_state(home) == []
+    (home / "cache").mkdir()
+    (home / "cache" / "keep.bin").write_text("runtime")
+    # a crash that skipped close(): the next run must still start from empty memory
+    (home / "memories").mkdir()
+    (home / "memories" / "MEMORY.md").write_text("stale entry from a killed run")
+    (home / "state.db-wal").write_text("stale")
+    with make(home, tmp_path) as agent:
+        assert agent.memory_entries() == [] and agent.memory_size() == 0
+        agent.start()
+        assert agent.memory_entries() == [] and not (home / "state.db-wal").exists()
+        agent.run_task(TASK, NOW)
+        assert agent.memory_entries() == []
+    assert (home / "cache" / "keep.bin").read_text() == "runtime"
+    assert (home / "installs" / "bootstrap.log").read_text() == "bootstrap\n"  # the runtime was built once
+    assert (home / "config.yaml").exists()
+
+
+@pytest.mark.parametrize("env, raises", [({}, None), ({"FAKE_HERMES_EXIT": "2"}, None),
+                                         ({"FAKE_HERMES_EXIT": "130"}, HermesError),
+                                         ({"FAKE_HERMES_SLEEP": "5"}, HermesError),
+                                         ({"FAKE_HERMES_INPUT_TOKENS": "5000"}, BudgetExceeded)])
+def test_no_memory_or_session_content_left_behind(home, tmp_path, env, raises):
+    """Success, failed attempt, raise, timeout and BudgetExceeded all leave no run state in the data root."""
+    agent = make(home, tmp_path, FAKE_HERMES_MEMORY_ADD="Prices go excl. VAT.", **env)
+    agent.timeout, agent.budget = 2, TokenBudget(4000)
+    with pytest.raises(raises) if raises else contextlib.nullcontext():
+        with agent:
+            agent.plant_rule(PLANTED)
             agent.run_task(TASK, NOW)
-    assert profiles(home) == []
+    assert run_state(home) == []
+    assert scan(home, "Acme") == [] and scan(home, "excl. VAT") == [] and scan(home, "Never mention") == []
+    assert ["gateway", "stop"] in calls(tmp_path)
 
 
-def test_one_profile_per_run_memory_persists(home, tmp_path):
+def test_memory_persists_across_tasks_within_a_run(home, tmp_path):
     with make(home, tmp_path, FAKE_HERMES_MEMORY_ADD="Prices go excl. VAT.") as agent:
         agent.run_task(TASK, NOW)
         agent.run_task(TASK, NOW)
         assert len(agent.store.rules()) == 2
-    assert len({c[1] for c in runs(tmp_path)}) == 1  # same profile both sessions
 
 
 def test_never_touches_real_home(home, tmp_path):
@@ -103,7 +162,7 @@ def test_never_touches_real_home(home, tmp_path):
         agent.version()
     assert list(fake_home.iterdir()) == []
     assert real.exists() == existed
-    assert profiles(home) == []
+    assert run_state(home) == []
 
 
 def test_exit_code_2_is_failed_attempt(home, tmp_path):
@@ -127,16 +186,6 @@ def test_exit_0_returns_output(home, tmp_path):
     assert agent.failed_attempts == 0
 
 
-@pytest.mark.parametrize("env", [{"FAKE_HERMES_EXIT": "130"}, {"FAKE_HERMES_SLEEP": "5"}])
-def test_interrupt_and_timeout_raise_and_leave_no_profile(home, tmp_path, env):
-    agent = make(home, tmp_path, **env)
-    agent.timeout = 0.5
-    with pytest.raises(HermesError):
-        with agent:
-            agent.run_task(TASK, NOW)
-    assert profiles(home) == []
-
-
 def test_tokens_from_usage_file(home, tmp_path):
     with make(home, tmp_path) as agent:
         assert agent.run_task(TASK, NOW).tokens == 1250  # total_including_auxiliary
@@ -146,6 +195,29 @@ def test_tokens_from_usage_file(home, tmp_path):
         assert agent.run_task(TASK, NOW).tokens == 42
     with make(home, tmp_path, FAKE_HERMES_USAGE_JSON='{"input_tokens": 30, "output_tokens": 12}') as agent:
         assert agent.run_task(TASK, NOW).tokens == 42
+
+
+def test_null_usage_failed_attempt_counts_zero_tokens(home, tmp_path):
+    """The first real call: exit 2 with every token field null. A failed attempt, not a crash."""
+    null = {"input_tokens": None, "output_tokens": None, "total_tokens": None, "api_calls": 0,
+            "completed": False, "failed": True, "auxiliary": {"total_tokens": None},
+            "total_including_auxiliary": {"total_tokens": None}}
+    with make(home, tmp_path, FAKE_HERMES_EXIT="2", FAKE_HERMES_USAGE_JSON=json.dumps(null)) as agent:
+        r = agent.run_task(TASK, NOW)
+        assert (r.output, r.failed_check, r.tokens) == ("", "hermes_failed", 0)
+        assert agent.failed_attempts == 1 and agent.tokens_used == 0
+    no_total = '{"total_including_auxiliary": null}'
+    with make(home, tmp_path, FAKE_HERMES_EXIT="1", FAKE_HERMES_USAGE_JSON=no_total) as agent:
+        assert agent.run_task(TASK, NOW).tokens == 0 and agent.failed_attempts == 1
+
+
+def test_unset_key_env_is_a_failed_attempt(home, tmp_path):
+    """The key comes only from the environment: with it unset Hermes exits 2 with null usage, as for real."""
+    agent = make(home, tmp_path)
+    agent.env.pop("LAB_KEY")
+    with agent:
+        r = agent.run_task(TASK, NOW)
+    assert r.failed_check == "hermes_failed" and r.tokens == 0 and agent.failed_attempts == 1
 
 
 def test_missing_usage_file_raises(home, tmp_path):
@@ -161,7 +233,7 @@ def test_budget_exceeded_after_task(home, tmp_path):
         with agent:
             agent.run_task(TASK, NOW)
             agent.run_task(TASK, NOW)
-    assert agent.tokens_used == 2500 and profiles(home) == []
+    assert agent.tokens_used == 2500 and run_state(home) == []
 
 
 def test_other_protocol_calls_spend_nothing(home, tmp_path):
@@ -229,8 +301,8 @@ def test_lab_and_hermes_get_the_same_task_text(home, tmp_path):
 
 def test_relative_profile_root_is_taken_from_the_repo_root(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    agent = HermesAgent(Path(".hermes-home"), "m", True, binary=FAKE)
-    assert agent.profile_root == REPO / ".hermes-home" and REPO == Path(__file__).resolve().parents[2]
+    agent = HermesAgent(Path(".hermes-lab/hermes_default"), "m", True, binary=FAKE)
+    assert agent.profile_root == REPO / ".hermes-lab" / "hermes_default" and REPO == Path(__file__).resolve().parents[2]
     assert HermesAgent(tmp_path / "hh", "m", True).profile_root == (tmp_path / "hh").resolve()
 
 
@@ -241,14 +313,14 @@ def test_missing_binary_gives_clear_error(home, tmp_path):
     with pytest.raises(HermesError, match="no-such-hermes-binary"):
         with agent:
             agent.run_task(TASK, NOW)
-    assert profiles(home) == []
+    assert run_state(home) == []
 
 
 def test_store_surface_works_with_reviewer(home, tmp_path):
     """run_simulation plants with store.add and the Monday Reviewer archives through rules()/archive()."""
     with make(home, tmp_path) as agent:
         store = agent.store
-        assert isinstance(store, MemoryMdStore) and store.rules() == []  # before the profile exists
+        assert isinstance(store, MemoryMdStore) and store.rules() == []  # before the run starts
         agent.plant_rule("Keep emails short.")
         store.add(Entry(id="planted-wrong-rule", kind="rule", key=None, tags=["global"], text=PLANTED,
                         importance=5, created_at=NOW, last_used_at=NOW, expires_at=None, status="active"))
@@ -276,7 +348,7 @@ def test_memory_size_reported(home, tmp_path):
 def test_no_memory_config_disables_stores(home, tmp_path):
     with make(home, tmp_path, memory_enabled=False) as agent:
         agent.run_task(TASK, NOW)
-        config = (agent.profile_dir / "config.yaml").read_text()
+        config = (home / "config.yaml").read_text()
     assert "memory_enabled: false" in config and "user_profile_enabled: false" in config
     toolsets = runs(tmp_path)[0][runs(tmp_path)[0].index("-t") + 1].split(",")
     assert "memory" not in toolsets and "terminal" not in toolsets
@@ -285,7 +357,7 @@ def test_no_memory_config_disables_stores(home, tmp_path):
 def test_memory_config_enables_stores(home, tmp_path):
     with make(home, tmp_path) as agent:
         agent.start()
-        config = (agent.profile_dir / "config.yaml").read_text()
+        config = (home / "config.yaml").read_text()
     assert "memory_enabled: true" in config and "user_profile_enabled: true" in config
 
 
@@ -294,11 +366,11 @@ def test_version_parses_hermes_version(home, tmp_path):
 
 
 def test_api_key_never_in_argv_or_on_disk(home, tmp_path):
-    with make(home, tmp_path) as agent:
+    with make(home, tmp_path, FAKE_HERMES_MEMORY_ADD="Prices go excl. VAT.") as agent:
         agent.plant_rule("Keep emails short.")
-        agent.run_task(TASK, NOW)
-        on_disk = [p for p in tmp_path.rglob("*") if p.is_file()]
-        assert any(p.name == "config.yaml" for p in on_disk)
-        for p in on_disk:
-            assert SENTINEL not in p.read_text(errors="ignore"), p
+        r = agent.run_task(TASK, NOW)
+        assert (home / "config.yaml").exists() and (home / "sessions").is_dir()
+        assert scan(tmp_path, SENTINEL) == []  # the whole data root and the logs, mid-run
+    assert scan(tmp_path, SENTINEL) == []
     assert all(SENTINEL not in a for c in calls(tmp_path) for a in c)
+    assert SENTINEL not in r.output + r.first_output

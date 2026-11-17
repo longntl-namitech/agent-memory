@@ -99,7 +99,7 @@ def _run_simulation(name: str, llm: LLMClient, store_dir: Path, results_dir: Pat
              if ln.strip()]
     embedder = make_embedder() if cfg.memory == "naive_rag" else None
     hermes = cfg.agent == "hermes"
-    # Hermes keeps its own MEMORY.md (agent.store) and spends llm.budget from its usage file; it makes a profile.
+    # Hermes keeps its own MEMORY.md (agent.store) and spends llm.budget from its usage file, in its own data root.
     store = None if hermes else Store(store_dir)
     deps = hermes_deps() if hermes else ({"embedder": embedder} if embedder else {})
     agent = build(cfg, llm=llm, store=store, check=sim_check(corrections), **deps)
@@ -139,7 +139,7 @@ def _run_simulation(name: str, llm: LLMClient, store_dir: Path, results_dir: Pat
                      extra={**extra, **_counters(agent)}, run_date=date.today().isoformat())
     finally:
         if hermes:
-            agent.close()  # no Hermes profile may outlive the run, whatever happened above
+            agent.close()  # stops the gateway; no Hermes memory or session may outlive the run, whatever happened
     print(f"{name}: wrote {path}")
     return aborted
 
@@ -229,6 +229,9 @@ PILOT_CAVEATS = [
     "(memory off has a shorter prompt), so it is a rough planning number: run the pilot for hermes_no_memory too "
     "if it matters",
     "the token cap is checked after each task, so one task can overshoot it",
+    "each Hermes call costs about 6k tokens of fixed system prompt and tools even for a trivial prompt (measured in "
+    "the first real call: 6,301 tokens), so a 40-task run is at least about 250k tokens, above the 100,000 "
+    "per-config default; the spec allows raising the cap for Hermes only, use `--per-config-cap` on `run`",
 ]
 
 
@@ -254,7 +257,9 @@ def _pilot(args, parser) -> int:
         print(f"dry run, Hermes was not invoked (pass --run --max-tokens N to run)\n"
               f"config: {args.config}, tasks: first {args.tasks} of 40\n"
               f"model: {opts.get('model', 'gpt-5.4-nano')}, endpoint: {host}, key from env var: {opts.get('key_env')}\n"
-              f"per task: {opts.get('binary', 'hermes')} -p <profile> -z <prompt> --usage-file <file> "
+              f"data root: HERMES_HOME={opts.get('profile_root', '.hermes-lab/' + args.config)} (reused; "
+              f"its first use installs a ~690 MB runtime)\n"
+              f"per task: {opts.get('binary', 'hermes')} -z <prompt> --usage-file <file> "
               f"--provider custom -m <model> -t <toolsets>")
         return 0
     if args.max_tokens is None:
@@ -288,7 +293,7 @@ def _pilot(args, parser) -> int:
         error = exc
     finally:
         failed_total = agent.failed_attempts
-        agent.close()  # no Hermes profile may outlive the run
+        agent.close()  # stops the gateway; no Hermes memory or session may outlive the run
     if error:
         print(f"pilot crashed after {len(rows)} tasks: {error}", file=sys.stderr)
         return 1

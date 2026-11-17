@@ -1,6 +1,9 @@
-"""Hermes Agent as a whole-agent baseline: one `hermes -z` call per task in one throwaway profile per run.
+"""Hermes Agent as a whole-agent baseline: one `hermes -z` call per task in a dedicated data root per config.
 
-Isolation: an isolated HERMES_HOME (`profile_root`) plus a fresh profile whose `config.yaml` the adapter writes.
+Isolation: `profile_root` IS the Hermes data root (HERMES_HOME, never ~/.hermes), with a `config.yaml` the adapter
+writes. No named profile and no `-p`: Hermes serves named profiles through a gateway that never sees our environment,
+so the key would have to sit in the profile `.env`. The data root is reused across runs (its first use bootstraps a
+~690 MB runtime); the run state (memory, sessions, logs) is wiped at start and again at close.
 No `--ignore-user-config` (it would drop that config) and no `--ignore-rules` (it would skip memory).
 The API key stays in the environment variable named by `key_env`; it is never read, written or logged here.
 """
@@ -24,6 +27,10 @@ MEMORY_CAP = 2_200  # memory.memory_char_limit default
 FAILED = "hermes_failed"
 _KEY_ENV = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 REPO = Path(__file__).resolve().parents[4]  # a relative profile_root is taken from the repo root, not the cwd
+# Data-root entries that hold memory, conversation or session content (checked in the v0.23.2 sources, see
+# docs/hermes-flags.md); wiped at start and close. The runtime (installs/, cache/, hermes-agent/ ...) is kept.
+RUN_STATE = ("memories", "sessions", "state.db*", "checkpoints", "logs", "pending_messages", "response_store.db*",
+             "workspace", "usage.json")
 _EPOCH = datetime(1970, 1, 1)  # MEMORY.md keeps no timestamps; the adapter never reads the clock
 
 
@@ -76,12 +83,12 @@ class MemoryMdStore:
 
 
 class HermesAgent(Agent):
-    """Runs each task as one fresh Hermes session; memory persists across tasks in the run's single profile.
+    """Runs each task as one fresh Hermes session; memory persists across tasks in the run's data root.
 
     A failed attempt (exit 2, or exit 1 / no text) returns `output=""` with `failed_check="hermes_failed"` and
     bumps `failed_attempts`: the runner then scores the empty output against the active rules as violations.
     Exit 130, any other exit code, a timeout or a missing usage file raise `HermesError`.
-    Use as a context manager or call `close()`: it deletes the profile.
+    Use as a context manager or call `close()`: it stops the gateway and wipes the run state.
     """
 
     def __init__(self, profile_root: Path, model: str, memory_enabled: bool, binary: str = "hermes", *,
@@ -94,9 +101,8 @@ class HermesAgent(Agent):
         self.base_url, self.key_env, self.max_turns, self.timeout = base_url, key_env, max_turns, timeout
         self.budget = budget or TokenBudget(None)  # Hermes calls the model itself, so its usage is spent here
         self.env = {**os.environ, **(env or {}), "HERMES_HOME": str(self.profile_root)}
-        self.name = "lab" + uuid.uuid4().hex[:12]
-        self.profile_dir = self.profile_root / "profiles" / self.name
-        self.memory_path = self.profile_dir / "memories" / "MEMORY.md"
+        self.workdir = self.profile_root / "workspace"  # cwd of each call: no AGENTS.md, file tool writes are wiped
+        self.memory_path = self.profile_root / "memories" / "MEMORY.md"
         self.llm = None  # no LLMClient: the simulation's crash pricing must not look for one
         self.failed_attempts = 0
         self.planted_over_cap = False  # a plant that pushed MEMORY.md past its cap (kept, not refused)
@@ -109,12 +115,13 @@ class HermesAgent(Agent):
     def tokens_used(self) -> int:
         return self.budget.used
 
-    def _call(self, args: list[str], cwd: Path) -> subprocess.CompletedProcess:
+    def _call(self, args: list[str], cwd: Path, timeout: float | None = None) -> subprocess.CompletedProcess:
+        timeout = timeout or self.timeout
         try:
             return subprocess.run([self.binary, *args], env=self.env, cwd=cwd, capture_output=True, text=True,
-                                  timeout=self.timeout)
+                                  timeout=timeout)
         except subprocess.TimeoutExpired as exc:
-            raise HermesError(f"hermes {args[0]} timed out after {self.timeout}s") from exc
+            raise HermesError(f"hermes {args[0]} timed out after {timeout}s") from exc
         except FileNotFoundError as exc:
             raise HermesError(f"hermes binary {self.binary!r} not found (PATH={self.env.get('PATH', '')}); "
                               "set `binary` in the [hermes] config table") from exc
@@ -138,25 +145,34 @@ class HermesAgent(Agent):
                   "memory:", f"  memory_enabled: {flag}", f"  user_profile_enabled: {flag}"]
         return "\n".join(lines) + "\n"
 
+    def _wipe(self) -> None:
+        for pattern in RUN_STATE:
+            for p in self.profile_root.glob(pattern):
+                if p.is_dir() and not p.is_symlink():
+                    shutil.rmtree(p, ignore_errors=True)
+                else:
+                    p.unlink(missing_ok=True)
+
     def start(self) -> None:
-        """Create the run's profile and write its config; idempotent."""
+        """Reset the data root for a new run (wipe the run state, keep the runtime) and write its config; idempotent."""
         if self._started:
             return
-        self._started = True  # before create, so close() also cleans a half-made profile
+        self._started = True  # before the reset, so close() also cleans a half-made one
         self.profile_root.mkdir(parents=True, exist_ok=True)
-        self._checked(["profile", "create", self.name, "--no-alias", "--no-skills", "--no-credentials"],
-                      self.profile_root)
-        (self.profile_dir / "config.yaml").write_text(self.config_yaml(), encoding="utf-8")
+        self._wipe()  # also clears what a killed run left behind
+        self.workdir.mkdir()
+        (self.profile_root / "config.yaml").write_text(self.config_yaml(), encoding="utf-8")
 
     def close(self) -> None:
+        """Stop the gateway a call may have auto-started, then wipe the run state: no memory outlives the run."""
         if not self._started:
             return
         try:
-            self._call(["profile", "delete", self.name, "-y"], self.profile_root)
+            self._call(["gateway", "stop"], self.profile_root, timeout=min(self.timeout, 60))
         except HermesError:
-            pass  # the rmtree below still removes the profile
+            pass  # timed out or no binary; a non-zero exit (nothing running) is ignored as well
         finally:
-            shutil.rmtree(self.profile_dir, ignore_errors=True)  # make sure, even if delete failed
+            self._wipe()
             self._started = False
 
     def __enter__(self) -> "HermesAgent":
@@ -187,17 +203,17 @@ class HermesAgent(Agent):
             total = total.get("total_tokens")
         if total is None:
             total = u.get("total_tokens")
-        if total is None:
-            total = u.get("input_tokens", 0) + u.get("output_tokens", 0)
+        if total is None:  # a failed call writes every token field as null: it spent 0
+            total = (u.get("input_tokens") or 0) + (u.get("output_tokens") or 0)
         return int(total)
 
     def run_task(self, task: Task, now: datetime) -> AgentResult:
         self.start()
-        usage = self.profile_dir / "usage.json"
+        usage = self.profile_root / "usage.json"
         usage.unlink(missing_ok=True)
         toolsets = "memory,file,skills,todo" if self.memory_enabled else "file,skills,todo"  # never terminal
-        p = self._call(["-p", self.name, "-z", self._prompt(task), "--usage-file", str(usage),
-                        "--provider", "custom", "-m", self.model, "-t", toolsets], self.profile_dir)
+        p = self._call(["-z", self._prompt(task), "--usage-file", str(usage),
+                        "--provider", "custom", "-m", self.model, "-t", toolsets], self.workdir)
         self._pending = []
         if p.returncode not in (0, 1, 2):  # 130 interrupted, or a crash
             if usage.exists():
@@ -224,8 +240,12 @@ class HermesAgent(Agent):
 
     # MEMORY.md plumbing for the simulation
 
+    def _memory_text(self) -> str:
+        # before start() the file may be a killed run's leftover, which start() wipes: it is not this run's memory
+        return self.memory_path.read_text(encoding="utf-8") if self._started and self.memory_path.exists() else ""
+
     def memory_entries(self) -> list[str]:
-        return _entries(self.memory_path.read_text(encoding="utf-8")) if self.memory_path.exists() else []
+        return _entries(self._memory_text())
 
     def write_memory(self, entries: list[str]) -> None:
         self.start()
@@ -233,7 +253,7 @@ class HermesAgent(Agent):
         self.memory_path.write_text(DELIM.join(entries), encoding="utf-8")
 
     def memory_size(self) -> int:
-        return len(self.memory_path.read_text(encoding="utf-8")) if self.memory_path.exists() else 0
+        return len(self._memory_text())
 
     def plant_rule(self, text: str) -> None:
         # Never refused: a raise would abort the whole run. Hermes' own entries stay; T24 checks Hermes over the cap.

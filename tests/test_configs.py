@@ -57,7 +57,9 @@ def test_hermes_configs_validate(tmp_path):
         agent = build(cfg, llm=stub_llm(tmp_path), store=None, binary=FAKE_HERMES, profile_root=tmp_path / "hh")
         assert isinstance(agent, HermesAgent) and agent.memory_enabled is memory and agent.binary == FAKE_HERMES
         assert agent.model == "gpt-5.4-nano" and agent.key_env == cfg.options["hermes"]["key_env"]
-        assert not (tmp_path / "hh").exists()  # the profile is made lazily, on first use
+        assert not (tmp_path / "hh").exists()  # the data root is reset lazily, on first use
+        assert cfg.options["hermes"]["profile_root"] == f".hermes-lab/{name}"  # one data root per config
+    assert ".hermes-lab/" in (cli.CONFIGS.parent / ".gitignore").read_text().splitlines()
 
 
 def test_every_config_validates(tmp_path):
@@ -282,17 +284,19 @@ def test_hermes_estimate_only_prices_zero_and_says_pilot(monkeypatch, capsys):
 def hermes_run(monkeypatch, tmp_path, **env):
     home = tmp_path / "hermes-home"
     deps = {"binary": FAKE_HERMES, "profile_root": home,
-            "env": {"HOME": str(tmp_path / "fake-home"), **env}}
+            "env": {"HOME": str(tmp_path / "fake-home"), "OPENAI_API_KEY": "sk-sentinel-cfg", **env}}
     monkeypatch.setattr(cli, "hermes_deps", lambda: deps)
     monkeypatch.setattr(cli, "make_llm", lambda budget: stub_llm(tmp_path, budget))
     return home
 
 
-def no_profiles(home) -> bool:
-    return not any((home / "profiles").glob("*")) if (home / "profiles").exists() else True
+def no_run_state(home) -> bool:
+    """No memory, session or log content left in the Hermes data root, and no named profile."""
+    left = ["memories", "sessions", "state.db", "logs", "workspace", "usage.json", "profiles"]
+    return not any((home / n).exists() for n in left)
 
 
-def test_hermes_run_writes_result_and_deletes_profile(monkeypatch, tmp_path):
+def test_hermes_run_writes_result_and_leaves_no_run_state(monkeypatch, tmp_path):
     home = hermes_run(monkeypatch, tmp_path, FAKE_HERMES_MEMORY_ADD="Prices go excl. VAT.")
     assert cli.main(run_args(tmp_path, "hermes_default", "--max-tokens", "500000")) == 0
     text = (tmp_path / "results" / "simulation_hermes_default.md").read_text()
@@ -303,7 +307,9 @@ def test_hermes_run_writes_result_and_deletes_profile(monkeypatch, tmp_path):
     assert "llm_cache" not in text and "- planted_over_cap: False" in text
     values = [ln.split(": ", 1)[1] for ln in text.splitlines() if "- extra_from_wrong_rule: " in ln]
     assert len(values) == 4 and all(v.isdigit() for v in values)  # memory on: MEMORY.md holds the planted rule
-    assert no_profiles(home)
+    assert no_run_state(home)
+    files = [f for f in [*home.rglob("*"), *(tmp_path / "results").rglob("*")] if f.is_file()]
+    assert files and not any("sk-sentinel-cfg" in f.read_text(errors="ignore") for f in files)
 
 
 def test_hermes_planted_rule_is_reviewed_out_of_memory_md(monkeypatch, tmp_path):
@@ -323,12 +329,12 @@ def test_hermes_planted_rule_is_reviewed_out_of_memory_md(monkeypatch, tmp_path)
     assert sizes[2] == [] and sizes[3] == []  # the week-3 Monday review removed the patched rule
 
 
-def test_hermes_crash_writes_partial_and_deletes_profile(monkeypatch, tmp_path):
+def test_hermes_crash_writes_partial_and_leaves_no_run_state(monkeypatch, tmp_path):
     home = hermes_run(monkeypatch, tmp_path, FAKE_HERMES_EXIT="130")
     assert cli.main(run_args(tmp_path, "hermes_default", "--max-tokens", "500000")) == 1
     text = (tmp_path / "results" / "simulation_hermes_default.md").read_text()
     assert text.startswith("PARTIAL RESULT") and "- completed_tasks: 0" in text
-    assert no_profiles(home)
+    assert no_run_state(home)
 
 
 def test_hermes_failed_attempts_counted(monkeypatch, tmp_path):
@@ -338,7 +344,7 @@ def test_hermes_failed_attempts_counted(monkeypatch, tmp_path):
     assert "- failed_attempts: 40" in text
     values = [ln.split(": ", 1)[1] for ln in text.splitlines() if "- extra_from_wrong_rule: " in ln]
     assert values == ["n/a (baseline has no RULES)"] * 4  # memory off: the planted rule never reaches the prompt
-    assert no_profiles(home)
+    assert no_run_state(home)
 
 
 def test_hermes_budget_from_its_own_usage(monkeypatch, tmp_path):
@@ -349,4 +355,4 @@ def test_hermes_budget_from_its_own_usage(monkeypatch, tmp_path):
     # 30,250 per task: the 4th task pushes the run over the 100k cap and is reported as crashed tokens
     assert text.startswith("PARTIAL RESULT") and "- completed_tasks: 3" in text
     assert "- crashed_tokens: 30250" in text and "- tokens: 121000" in text
-    assert no_profiles(home)
+    assert no_run_state(home)
