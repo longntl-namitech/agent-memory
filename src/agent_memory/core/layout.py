@@ -119,6 +119,10 @@ class Store:
         """Active and archived rules, for rebuilding RULES at a past time."""
         return list(self._entries["rule"])
 
+    def all_facts(self) -> list[Entry]:
+        """Active and archived facts; entries are never deleted, so the length only grows."""
+        return list(self._entries["fact"])
+
     def all_log(self) -> list[Entry]:
         """Active and archived log lines."""
         return list(self._entries["log"])

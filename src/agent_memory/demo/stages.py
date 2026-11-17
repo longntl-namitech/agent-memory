@@ -9,7 +9,6 @@ from agent_memory.core.layout import MAX_RULES, Entry, Store, slug
 from agent_memory.core.llm import LLMClient
 from agent_memory.core.memory import Event, Task, WriteStage
 from agent_memory.core.registry import register
-from agent_memory.methods.write_filter.stage import _norm
 
 _KINDS = ("rule", "fact", "log")
 MAX_ENTRIES = 6
@@ -25,6 +24,10 @@ Reply with JSON only: {{"entries": [{{"kind": "fact"|"rule"|"log", "key": str, "
 - log: anything else worth a line, including one-off situations ("this week I'm on a diet").
 - Reminders and to-do items are handled elsewhere: do NOT record them.
 Chat turn: {text}"""
+
+
+def _norm(text: str) -> str:
+    return " ".join(text.lower().split())
 
 
 @register("no_memory", "memory")
@@ -54,6 +57,7 @@ class AssistantWrite(WriteStage):
     def __init__(self) -> None:
         self.fallbacks = 0  # turns written as a raw log line because the reply was unusable
         self.dropped_rules = 0  # rules skipped because MAX_RULES active rules already exist
+        self.skipped_entries = 0  # malformed single entries (unknown kind, empty text, not an object)
 
     def write(self, event: Event, store: Store, now: datetime, llm: LLMClient) -> list[Entry]:
         keys = sorted({f.key for f in store.facts()})
@@ -85,15 +89,15 @@ class AssistantWrite(WriteStage):
             e = mk(f"rule-{len(store.all_rules())}")
             store.add(e)
         elif kind == "fact":
-            e = mk(f"fact-{key}-{len(store.facts())}", key)  # no clock in the id: replays must match
-            store.upsert_fact(e)
+            # all_facts counts archived ones too, so ids never repeat; no clock in the id: replays must match
+            store.upsert_fact(mk(f"fact-{key}-{len(store.all_facts())}", key))
+            e = next(f for f in store.facts() if f.key == key)  # on an overwrite this is the old entry
         else:
             e = mk(f"log-{len(store.all_log())}")
             store.add(e)
         return e
 
-    @staticmethod
-    def _parse(reply: str) -> list[dict] | None:
+    def _parse(self, reply: str) -> list[dict] | None:
         """Clean entries, or None when the reply is unusable. Malformed single entries are skipped."""
         m = re.search(r"\{.*\}", reply, re.S)  # tolerate a code fence around the JSON
         try:
@@ -105,9 +109,11 @@ class AssistantWrite(WriteStage):
         items = []
         for d in raw:
             if not isinstance(d, dict):
+                self.skipped_entries += 1
                 continue
             kind, text = str(d.get("kind", "")).strip().lower(), str(d.get("text") or "").strip()
             if kind not in _KINDS or not text:
+                self.skipped_entries += 1
                 continue
             try:
                 imp = min(10, max(1, int(d.get("importance", 5))))
