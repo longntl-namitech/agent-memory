@@ -1,7 +1,7 @@
 import json
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Callable, Protocol
+from typing import Callable, Protocol
 
 from agent_memory.core.layout import Entry, Store
 from agent_memory.core.llm import LLMClient
@@ -40,6 +40,18 @@ class AgentResult:
     failed_check: str | None
 
 
+@dataclass
+class Routed:
+    """What a sort stage hands to recall: the entries per store, all ACTIVE, in store order."""
+
+    rules: list[Entry]
+    facts: list[Entry]
+    log: list[Entry]
+
+
+Route = Callable[[Store, Task], Routed]  # the sort stage; a pure function of store and task
+
+
 class WriteStage(Protocol):
     """Persists its own entries to the store; the returned list is informational only."""
 
@@ -47,7 +59,7 @@ class WriteStage(Protocol):
 
 
 class RecallStage(Protocol):
-    def recall(self, task: Task, store: Store, now: datetime, route: Any) -> str: ...
+    def recall(self, task: Task, store: Store, now: datetime, route: Route) -> str: ...
 
 
 class ForgetStage(Protocol):
@@ -87,7 +99,7 @@ class StagedMemory:
     store: Store
     llm: LLMClient
     writer: WriteStage
-    route: Any
+    route: Route
     recaller: RecallStage
     reflectors: list[ReflectStage]
     forgetters: list[ForgetStage]
