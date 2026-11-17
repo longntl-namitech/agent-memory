@@ -10,12 +10,14 @@ Ability mapping (the five LongMemEval abilities), from `question_type` plus the 
   multi-session reasoning - multi-session
   knowledge updates       - knowledge-update
   temporal reasoning      - temporal-reasoning
-Verified against the LongMemEval README: the question_type names above, the `_abs` rule (abstention
-rows sit inside the other types' rows) and the file names. Not fetched: the `resolve/main` URL
-pattern. An unknown question_type raises ValueError.
+Verified against the LongMemEval GitHub README (https://github.com/xiaowu0162/LongMemEval) and the
+Hugging Face dataset card: the question_type names above, the `_abs` rule (30 of 500 questions, inside
+the other types' rows) and the file names. Not fetched: the `resolve/main` URL pattern. An unknown
+question_type raises ValueError.
 
-Memory: json-loading the ~265 MB s_cleaned file needs roughly 1-3 GB RAM, so the runner should load
-it once, select, and write the selected 50 to a small JSON in `.cache/`.
+Memory: UNVERIFIED estimates, re-check at the first real download (file size was not checked): s_cleaned
+is about 265 MB and json-loading it needs roughly 1-3 GB RAM. Either way, the runner should load it
+once, select, and write the selected 50 to a small JSON in `.cache/`.
 
 Split sizes of the cleaned split must be checked at download time (spec caveat): `split_sizes`.
 """
