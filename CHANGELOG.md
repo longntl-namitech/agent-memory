@@ -17,6 +17,7 @@
 - `--per-config-cap` option for simulation runs (default 100,000).
 - `write_filter` skips a correction text it has already handled and counts rules dropped at the 20-rule cap.
 - Results show `extra_from_wrong_rule` as `n/a` for whole-memory baselines and note that `reflexion` corrections come after an oracle-guided retry.
+- `agent-memory pilot`: runs the first N tasks on a Hermes config (dry run unless `--run --max-tokens N`) and extrapolates tokens to 40 tasks x 6 runs.
 - LongMemEval subset-first rule enforced: above 5,000,000 for the full set, a run above 1,000,000 needs `--confirm-full`.
 
 ### Not yet

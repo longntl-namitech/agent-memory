@@ -49,6 +49,8 @@ estimate only, nothing was run (pass --no-estimate-only to run)
 
 `--estimate-only` is the default for `run`. A real run needs `--no-estimate-only`, an `OPENAI_API_KEY` (see `.env.example`) and a token cap with `--max-tokens`.
 
+Hermes pilot (a dry run unless `--run --max-tokens N` is given; `--run` makes real model calls): `uv run agent-memory pilot --config hermes_default --tasks 3` prints tokens per task and the extrapolation to 40 tasks x 6 runs.
+
 <details>
 <summary>More commands</summary>
 

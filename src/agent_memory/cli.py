@@ -6,8 +6,9 @@ import json
 import os
 import sys
 import tempfile
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
+from urllib.parse import urlparse
 
 from agent_memory.core.clock import SimClock
 from agent_memory.core.config import build, load_config
@@ -214,6 +215,103 @@ def _run_lme(args, names: list[str], est, full) -> int:
     return 0
 
 
+def extrapolate(per_task_tokens: list[int], tasks_per_run: int = 40, runs: int = 6) -> dict:
+    """Scale the pilot's mean tokens per task to a full run, to `runs` runs, and to one run per config (2 configs)."""
+    mean = sum(per_task_tokens) / len(per_task_tokens)
+    per_run = round(mean * tasks_per_run)
+    return {"mean": mean, "per_run": per_run, "all_runs": per_run * runs, "one_run_per_config": per_run * 2}
+
+
+def _pilot_range(text: str) -> int:
+    n = int(text)
+    if not 1 <= n <= 40:
+        raise argparse.ArgumentTypeError(f"must be between 1 and 40, got {n}")
+    return n
+
+
+def _pilot(args, parser) -> int:
+    from types import SimpleNamespace
+
+    from agent_memory.methods.hermes import HermesError
+
+    cfg = load_config(CONFIGS / f"{args.config}.toml") if (CONFIGS / f"{args.config}.toml").exists() else None
+    if cfg is None or cfg.agent != "hermes":
+        print(f"refused: {args.config!r} is not an agent = \"hermes\" config", file=sys.stderr)
+        return 2
+    opts = cfg.options.get("hermes", {})
+    if not args.run:
+        host = urlparse(os.environ.get("OPENAI_BASE_URL") or "").hostname or "(Hermes default)"
+        print(f"dry run, Hermes was not invoked (pass --run --max-tokens N to run)\n"
+              f"config: {args.config}, tasks: first {args.tasks} of 40\n"
+              f"model: {opts.get('model', 'gpt-5.4-nano')}, endpoint: {host}, key from env var: {opts.get('key_env')}\n"
+              f"per task: {opts.get('binary', 'hermes')} -p <profile> -z <prompt> --usage-file <file> "
+              f"--provider custom -m <model> -t <toolsets>")
+        return 0
+    if args.max_tokens is None:
+        print("refused: --run needs --max-tokens (the pilot makes real model calls)", file=sys.stderr)
+        return 2
+    path = args.results_dir / f"pilot_{args.config}.md"
+    if path.exists() and not args.overwrite:
+        print(f"refused: {path} exists (pass --overwrite to replace it)", file=sys.stderr)
+        return 2
+    tasks = [Task(**json.loads(ln)) for ln in (DATA / "tasks.jsonl").read_text(encoding="utf-8").splitlines()
+             if ln.strip()][:args.tasks]
+    budget = TokenBudget(args.max_tokens)
+    agent = build(cfg, llm=SimpleNamespace(budget=budget), store=None, **hermes_deps())
+    rows, stopped, error = [], None, None  # row: (task id, tokens, words or None, failed)
+    clock = SimClock(SIM_START)
+    try:
+        version = agent.version()
+        for i, task in enumerate(tasks):
+            prev = tasks[i - 1] if i else None
+            slot = 0 if prev is None or (prev.week, prev.day) != (task.week, task.day) else slot + 1
+            clock.set(SIM_START + timedelta(days=(task.week - 1) * 7 + task.day - 1, hours=9 + 2 * slot))
+            used, failed = budget.used, agent.failed_attempts
+            try:
+                out = agent.run_task(task, clock.now())
+            except BudgetExceeded as exc:
+                rows.append((task.id, budget.used - used, None, True))
+                stopped = str(exc)
+                break
+            rows.append((task.id, budget.used - used, len(out.output.split()), agent.failed_attempts > failed))
+    except HermesError as exc:
+        error = exc
+    finally:
+        failed_total = agent.failed_attempts
+        agent.close()  # no Hermes profile may outlive the run
+    if error:
+        print(f"pilot crashed after {len(rows)} tasks: {error}", file=sys.stderr)
+        return 1
+    ex = extrapolate([r[1] for r in rows])
+    print("task, tokens, words, failed")
+    for tid, tok, words, bad in rows:
+        print(f"{tid}, {tok}, {'n/a' if words is None else words}, {'yes' if bad else 'no'}")
+    n = len(rows)
+    lines = [f"mean tokens per task: {ex['mean']:.0f}",
+             f"40 tasks = {ex['per_run']:,} per run",
+             f"6 runs = 2 configs x 3 runs = {ex['all_runs']:,}",
+             f"1 run per config (2 configs) = {ex['one_run_per_config']:,}",
+             f"per-config cap {PER_CONFIG_CAP:,}: a single run would "
+             f"{'exceed' if ex['per_run'] > PER_CONFIG_CAP else 'stay under'} it"]
+    if stopped:
+        print(f"stopped: token budget reached ({stopped}); partial summary of {n} tasks")
+    print("\n".join(lines))
+    print(f"This is an extrapolation from {n} tasks; nothing beyond the pilot was run. "
+          "The user decides before any full Hermes run.")
+    extra = {"hermes_version": version, "reproducibility": "not cache-reproducible", "tasks": n,
+             "mean_tokens_per_task": f"{ex['mean']:.0f}", "failed_attempts": failed_total,
+             "extrapolation_per_run_40_tasks": ex["per_run"], "extrapolation_6_runs": ex["all_runs"],
+             "extrapolation_1_run_per_config": ex["one_run_per_config"], "per_config_cap": PER_CONFIG_CAP}
+    if stopped:
+        extra["partial"] = True
+    write_result(path, eval_name="pilot", config=args.config, model=agent.model, embedding_model="none",
+                 subset=f"first {n} tasks", seed=SIM_SEED, tokens=budget.used,
+                 metrics={f"task {t}": {"tokens": tok, "words": w, "failed": bad} for t, tok, w, bad in rows},
+                 extra=extra, run_date=date.today().isoformat())
+    print(f"wrote {path}")
+    return 1 if stopped else 0
+
+
 def _positive(text: str) -> int:
     n = int(text)
     if n < 1:
@@ -324,7 +422,18 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--overwrite", action="store_true", help="replace existing results files")
     run.add_argument("--out", type=Path, help="where the per-config stores go (default: a temp dir)")
     run.add_argument("--results-dir", type=Path, default=Path("results"))
+    pilot = sub.add_parser("pilot", help="run the first N tasks on a Hermes config and extrapolate the tokens")
+    pilot.add_argument("--config", default="hermes_default")
+    pilot.add_argument("--tasks", type=_pilot_range, default=3, help="first N tasks, 1 to 40 (default 3)")
+    pilot.add_argument("--run", action="store_true", help="really call Hermes and the model (default: dry run)")
+    pilot.add_argument("--max-tokens", type=_positive, help="required with --run: stop when Hermes' usage passes it")
+    pilot.add_argument("--overwrite", action="store_true", help="replace an existing pilot results file")
+    pilot.add_argument("--results-dir", type=Path, default=Path("results"))
     args = parser.parse_args(argv)
+    if args.command == "pilot":
+        import agent_memory.methods  # noqa: F401
+
+        return _pilot(args, pilot)
     if args.command == "run":
         import agent_memory.methods  # noqa: F401  registers the stages before load_config/build
 
