@@ -170,7 +170,7 @@ Not run: `lme_b1_write_filter`, `lme_b2_coala_stores` and `lme_baseline_full_con
 ### How to read these numbers
 
 - Each config ran once, and the LLM is nondeterministic, so differences of a few corrections are noise.
-- Week 1 is 0 for every lab config because corrections are written to memory when a rule becomes active.
+- Week 1 is 0 for most lab configs because corrections are written to memory when a rule becomes active. The exceptions in the tables are `baseline_naive_rag` (7 corrections), `no_write_filter` (1 correction, 5 first-attempt failures) and the two Hermes configs (3 each).
 - Week 2 is dominated by the planted wrong rule (`extra_from_wrong_rule`), which the Monday review removes in week 3.
 - `full` and the reflexion configs are scored after an oracle-guided retry. Compare memory methods on first-attempt failures.
 - `no_reflexion` equals `b5_forget` and shows identical numbers.
