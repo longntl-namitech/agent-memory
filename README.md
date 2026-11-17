@@ -4,7 +4,7 @@
 
 **A private lab that measures agent-memory techniques by config-driven ablation.**
 
-![python](https://img.shields.io/badge/python-3.11%2B-blue) ![license](https://img.shields.io/badge/license-MIT-green) ![version](https://img.shields.io/badge/version-0.1.0-lightgrey) ![status](https://img.shields.io/badge/results-none%20yet-orange)
+![python](https://img.shields.io/badge/python-3.11%2B-blue) ![license](https://img.shields.io/badge/license-MIT-green) ![version](https://img.shields.io/badge/version-0.1.0-lightgrey) ![status](https://img.shields.io/badge/results-first%20runs-orange)
 
 [Pipeline](#pipeline) | [Quickstart](#quickstart) | [Methods](#methods) | [Configs](#configs) | [Results](#results) | [Caveats](#caveats) | [Backlog](#backlog)
 
@@ -117,19 +117,78 @@ On LongMemEval only `overwrite` runs as a forget stage; `reflect`, `reflexion`, 
 
 ## Results
 
-**No results yet.** The first runs need the user's go-ahead and a token budget, so there is no results table and no `results/` folder. When runs exist, each writes `results/<eval>_<config>.md` with a fixed header (date, model, embedding model, subset, seed, tokens) and the tables here will link to those files.
+First measured runs, all on 2026-11-17 with `gpt-5.4-nano`, seed 7. Each config was run once. Every number below comes from the linked files in [`results/`](results/).
 
-The corrections-per-week figure below is an empty template, not a chart. It will be filled by the first measured runs.
+### Simulation (40 tasks, 4 weeks)
 
-<p align="center"><img src="docs/diagrams/corrections-per-week.svg" alt="Empty axes for corrections per week, labelled no data yet" width="70%"></p>
+All 14 lab configs and the 2 Hermes configs ran all 40 tasks (no PARTIAL result).
 
-Estimates from the dry runs (no LLM call was made):
+| Config | Corrections w1/w2/w3/w4 | First-attempt failures w1/w2/w3/w4 | Stale-fact errors (total) | Tokens |
+|---|---|---|---|---|
+| [`baseline_full_context`](results/simulation_baseline_full_context.md) | 0/1/5/5 | 0/1/5/5 | 0 | 15,645 |
+| [`baseline_naive_rag`](results/simulation_baseline_naive_rag.md) | 7/21/37/37 | 7/21/37/37 | 18 | 47,528 |
+| [`b1_write_filter`](results/simulation_b1_write_filter.md) | 0/9/0/0 | 0/9/0/0 | 0 | 20,861 |
+| [`b2_coala_stores`](results/simulation_b2_coala_stores.md) | 0/9/0/0 | 0/9/0/0 | 0 | 0 |
+| [`b3_recall`](results/simulation_b3_recall.md) | 0/9/1/0 | 0/9/1/0 | 0 | 20,530 |
+| [`b4_reflect`](results/simulation_b4_reflect.md) | 0/9/3/1 | 0/9/3/1 | 1 | 35,790 |
+| [`b5_forget`](results/simulation_b5_forget.md) | 0/10/3/4 | 0/10/3/4 | 1 | 26,851 |
+| [`full`](results/simulation_full.md) | 0/7/0/0 | 0/9/0/2 | 0 | 22,438 |
+| [`no_write_filter`](results/simulation_no_write_filter.md) | 1/10/3/1 | 5/10/10/1 | 0 | 63,382 |
+| [`no_coala_stores`](results/simulation_no_coala_stores.md) | 0/9/9/10 | 0/9/9/9 | 1 | 105,161 |
+| [`no_recall`](results/simulation_no_recall.md) | 0/4/0/0 | 0/6/1/1 | 0 | 40,702 |
+| [`no_reflect`](results/simulation_no_reflect.md) | 0/8/1/0 | 0/9/2/1 | 0 | 27,302 |
+| [`no_forget`](results/simulation_no_forget.md) | 0/7/2/4 | 0/9/4/5 | 0 | 65,202 |
+| [`no_reflexion`](results/simulation_no_reflexion.md) | 0/10/3/4 | 0/10/3/4 | 1 | 0 |
+| [`hermes_default`](results/simulation_hermes_default.md) | 3/12/19/15 | 3/12/19/15 | 9 | 161,986 |
+| [`hermes_no_memory`](results/simulation_hermes_no_memory.md) | 3/11/21/14 | 3/11/21/14 | 9 | 141,230 |
+
+`extra_from_wrong_rule` is `n/a` for `baseline_full_context`, `baseline_naive_rag` and `hermes_no_memory` (the two baselines recall only the log, so the planted rule never reaches their prompt). The other configs show it in their files (for example 7 in week 2 for `full`).
+
+### LongMemEval, 8-question subset
+
+Subset of 8 questions from the 50 selected (seed 7). One question is 12.5 points, so these differences are within noise. Judge: `gpt-5.4-nano` with the LongMemEval prompts, not the official one.
+
+| Ability | `lme_b3_scored_recall` | `lme_full` | `lme_baseline_naive_rag` |
+|---|---|---|---|
+| information extraction (2) | 1/2 | 1/2 | 1/2 |
+| multi-session reasoning (2) | 0/2 | 0/2 | 1/2 |
+| knowledge updates (2) | 0/2 | 0/2 | 0/2 |
+| temporal reasoning (1) | 0/1 | 0/1 | 0/1 |
+| abstention (1) | 1/1 | 1/1 | 1/1 |
+| all (8) | 2/8 (25%) | 2/8 (25%) | 3/8 (38%) |
+| tokens | 899,041 | 0 | 107,781 |
+
+Files: [`lme_b3_scored_recall`](results/longmemeval_lme_b3_scored_recall.md), [`lme_full`](results/longmemeval_lme_full.md), [`lme_baseline_naive_rag`](results/longmemeval_lme_baseline_naive_rag.md).
+
+Not run: `lme_b1_write_filter`, `lme_b2_coala_stores` and `lme_baseline_full_context`. The full 50-question run was NOT done: it is above the 5,000,000 token rule and needs the user's go-ahead.
+
+### Hermes Agent
+
+- Pilot ([`results/pilot_hermes_default.md`](results/pilot_hermes_default.md)): 3 tasks of `hermes_default`, about 3.7k tokens per task, 0 failed attempts.
+- Full runs, 40 tasks each, 0 failed attempts: `hermes_default` 161,986 tokens, `hermes_no_memory` 141,230 tokens (rows in the simulation table above).
+
+### How to read these numbers
+
+- Each config ran once, and the LLM is nondeterministic, so differences of a few corrections are noise.
+- Week 1 is 0 for every lab config because corrections are written to memory when a rule becomes active.
+- Week 2 is dominated by the planted wrong rule (`extra_from_wrong_rule`), which the Monday review removes in week 3.
+- `full` and the reflexion configs are scored after an oracle-guided retry. Compare memory methods on first-attempt failures.
+- `no_reflexion` equals `b5_forget` and shows identical numbers.
+- Token counts depend on run order because the LLM cache is shared. `b2_coala_stores` and `no_reflexion` show 0 tokens: their prompts matched `b1_write_filter` and `b5_forget`, so every call was a cache hit.
+- Hermes never wrote its own MEMORY.md entries in 40 tasks, so `hermes_default` behaves like `hermes_no_memory`. The 3-run spread for Hermes was not produced.
+- `baseline_naive_rag` violates almost every task.
+- The LongMemEval judge is not the official one. `lme_full` equals `lme_b3_scored_recall` (overwrite changed nothing, 0 tokens).
+- These numbers show what happened in one run per config. They cannot show which stages help or hurt, or how large the run-to-run spread is.
+
+### Dry-run estimates
+
+Made before the runs (no LLM call):
 
 | Eval | Estimate | Note |
 |---|---|---|
 | Simulation, 1 config | 100,000 tokens | placeholder: 2,000 prompt + 500 completion per task, 40 tasks |
 | Simulation, 14 configs | 1,400,000 tokens (prompt 1,120,000, completion 280,000) | same placeholder; not above 5,000,000 |
-| LongMemEval, `lme_full`, `--questions 8` | 967,200 tokens (prompt 920,000, completion 24,000, overhead 23,200) | per-question overheads are UNVERIFIED placeholders; not above 5,000,000 |
+| LongMemEval, `lme_full`, `--questions 8` | 967,200 tokens (prompt 920,000, completion 24,000, overhead 23,200) | per-question overheads are placeholders; not above 5,000,000 |
 
 For LongMemEval the full set is above 5,000,000 tokens. The rule is to run a subset under 1,000,000 first and ask before the full set. The CLI enforces it: when the full-set estimate of the chosen configs is above 5,000,000, a run estimated above 1,000,000 is refused unless `--confirm-full` is given.
 
@@ -142,15 +201,14 @@ For LongMemEval the full set is above 5,000,000 tokens. The rule is to run a sub
 - Reflexion is told the failed check and the rule wording, so the check acts as an oracle, stronger than a real deployment.
 - The LongMemEval judge is the LLM judge copied from LongMemEval's `evaluate_qa.py`, run on `gpt-5.4-nano`. It is NOT comparable with the official GPT-4o judge.
 - `lme_b1_write_filter` and `lme_b2_coala_stores` recall an empty memory (a no-memory floor), so abstention scores high.
-- The LongMemEval date format and the placeholder token overheads are UNVERIFIED until the first real download and run.
-- The simulation token estimate is a placeholder until a measured run.
-- Each simulation config is capped at 100,000 tokens (the spec's limit). A stub run used about 147,000 for `baseline_full_context`, so some configs may stop with a PARTIAL result. `--per-config-cap N` raises the cap; take that decision after a pilot run.
+- The LongMemEval date format and the placeholder token overheads are still UNVERIFIED: the subset used 899,041 tokens against a 990,400 estimate.
+- Each simulation config is capped at 100,000 tokens (the spec's limit). A stub run used about 147,000 for `baseline_full_context`, so a config may stop with a PARTIAL result. In the first runs the cap was raised (150,000, and 250,000 for `baseline_full_context` and Hermes) and none stopped early. `--per-config-cap N` raises the cap; take that decision after a pilot run.
 - `write_filter` handles each distinct correction text until it reaches a rule outcome (stored, duplicate or dropped at the cap). After that, the same correction written again (after a violation) makes no LLM call, so reworded copies cannot fill the 20-rule cap. Rules skipped because 20 are already active are counted as `write_filter_dropped_rules` in the results.
 - `extra_from_wrong_rule` is shown as `n/a` for the `full_context` and `naive_rag` baselines: they recall only the log, so the planted rule never reaches their prompt.
 - For configs with `reflexion`, the results say that corrections are counted after an oracle-guided retry. Compare memory methods on `first_attempt_failures`.
 - The LLM cache key is (model, messages), without the endpoint. Changing `OPENAI_BASE_URL` while keeping the same model name replays cached replies.
 - Embedding calls are not counted against the token budgets. With no `EMBEDDING_*` env set, the fastembed model is downloaded from Hugging Face on first use, outside the `--download` gate.
-- The Hermes Agent baseline (`hermes_default`, `hermes_no_memory`, simulation only) is built but has no full-run results yet. Its rows are marked "not cache-reproducible", because Hermes calls the model itself and reads real time. Measured on 2026-11-17 by the second real pilot (3 tasks of `hermes_default`, toolsets `memory,todo`): 3,715 / 3,719 / 3,758 tokens per task (mean 3,731), 0 failed attempts; extrapolated 149,227 per 40-task run, 895,362 for 6 runs (2 configs x 3), 298,454 for 1 run per config. The recommended per-config cap for a Hermes run is at least about 150,000 plus headroom for growth: the figure is a downward-biased lower bound (no corrections, no planted rule, empty MEMORY.md). `run` needs an explicit `--per-config-cap` for a Hermes config.
+- The Hermes Agent baseline (`hermes_default`, `hermes_no_memory`, simulation only) is built and has one full run per config (see Results). Its rows are marked "not cache-reproducible", because Hermes calls the model itself and reads real time. Measured on 2026-11-17 by the second real pilot (3 tasks of `hermes_default`, toolsets `memory,todo`): 3,715 / 3,719 / 3,758 tokens per task (mean 3,731), 0 failed attempts; extrapolated 149,227 per 40-task run, 895,362 for 6 runs (2 configs x 3), 298,454 for 1 run per config. The recommended per-config cap for a Hermes run is at least about 150,000 plus headroom for growth: the figure is a downward-biased lower bound (no corrections, no planted rule, empty MEMORY.md). `run` needs an explicit `--per-config-cap` for a Hermes config.
 
 ## Data and attribution
 
