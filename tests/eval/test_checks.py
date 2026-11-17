@@ -87,3 +87,10 @@ def test_skip_markdown_and_quotes():
 def test_vat_wording(phrase, ok):
     out = check(task(), good().replace("excl. VAT", phrase), ALL)
     assert out == ([] if ok else ["vat"])
+
+
+def test_rule_wording():
+    from agent_memory.core.eval.checks import rule_wording
+    assert "Best regards, Sam from Brightpath" in rule_wording("sign_off")
+    assert "SKIP" in rule_wording("closed_deals")
+    assert rule_wording("nope") == "nope"

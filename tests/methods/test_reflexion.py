@@ -104,3 +104,12 @@ def test_empty_note_not_written():
     a, mem = agent(llm, lambda t, o: "vat" if o == "first" else None)
     a.run_task(TASK, NOW)
     assert mem.events == []
+
+
+def test_prompt_carries_rule_wording_and_skip_instruction():
+    llm = StubLLM(j())
+    Reflexion().retry(TASK, "a", "sign_off", "", llm)
+    text = llm.calls[0][1][0]["content"]
+    assert "sign_off: End every email with the exact sign-off" in text
+    assert "Best regards, Sam from Brightpath" in text
+    assert "exactly SKIP" in text

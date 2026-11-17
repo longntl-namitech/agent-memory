@@ -1,6 +1,6 @@
 # reflexion
 
-Retry stage. After a failed check, `MemoryAgent` calls `Reflexion.retry` once. One LLM call (`purpose="reflexion"`) is told the name of the failed check (for example `vat` or `booking_link`), the lead, the first output and the recalled context. It replies with JSON `{"note": ..., "output": ...}`: a short reflection (what went wrong, what to do next time) and the corrected output.
+Retry stage. After a failed check, `MemoryAgent` calls `Reflexion.retry` once. One LLM call (`purpose="reflexion"`) is told the failed check as `<id>: <rule wording>` (for example `sign_off: End every email with the exact sign-off ...`, wording from `rule_wording` in `core/eval/checks.py`), the lead, the first output and the recalled context. It replies with JSON `{"note": ..., "output": ...}`: a short reflection (what went wrong, what to do next time) and the corrected output.
 
 - The output replaces the first one. The note goes through `memory.write` as a `reflection` event, so the configured write stage stores (or drops) it. An empty note is not written.
 - Configured as `[reflect] stages = ["reflect", "reflexion"]`.

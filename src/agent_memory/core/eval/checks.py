@@ -1,5 +1,8 @@
+import json
 import re
 import string
+from functools import cache
+from pathlib import Path
 
 from agent_memory.core.memory import Task
 
@@ -15,6 +18,17 @@ _EX_VAT = re.compile(r"\b(excl(uding|usive of)?|ex|without)\.?[\s-]*VAT\b", re.I
 
 def normalise_skip(output: str) -> bool:
     return output.strip(_NOISE).lower() == "skip"
+
+
+@cache
+def _rules() -> dict[str, str]:
+    path = Path(__file__).resolve().parents[4] / "data" / "simulation" / "corrections.json"
+    return {c["id"]: c["rule"] for c in json.loads(path.read_text())}
+
+
+def rule_wording(check_id: str) -> str:
+    """The correction's rule text for a check id; the id itself when unknown."""
+    return _rules().get(check_id, check_id)
 
 
 def check(task: Task, output: str, active: set[str]) -> list[str]:
