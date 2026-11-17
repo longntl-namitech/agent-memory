@@ -10,3 +10,5 @@ from agent_memory.methods.pool_route import stage as _pool_route  # noqa: F401
 from agent_memory.methods import rules_only, tag_recall  # noqa: F401
 from agent_memory.methods.rules_only import stage as _rules_only  # noqa: F401
 from agent_memory.methods.tag_recall import stage as _tag_recall  # noqa: F401
+from agent_memory.methods import scored_recall  # noqa: F401
+from agent_memory.methods.scored_recall import stage as _scored_recall  # noqa: F401
