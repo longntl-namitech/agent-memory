@@ -133,3 +133,10 @@ def test_replace_fact_updates_in_place_and_persists(tmp_path):
     e = Store(tmp_path).facts()[0]
     assert (e.id, e.created_at, e.text, e.tags, e.importance, e.expires_at, e.last_used_at) == (
         "a", t0, "new", ["y"], 7, t1, t1)
+
+
+def test_set_expiry_persists(tmp_path):
+    s = Store(tmp_path)
+    s.add(Entry("l1", "log", None, [], "x", 5, T, T, None, "active"))
+    s.set_expiry("l1", T)
+    assert Store(tmp_path).log()[0].expires_at == T

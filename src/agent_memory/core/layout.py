@@ -99,6 +99,13 @@ class Store:
                 e.text, e.tags, e.importance, e.expires_at, e.last_used_at = text, list(tags), importance, expires_at, now
         self._save()
 
+    def set_expiry(self, id: str, expires_at: datetime) -> None:
+        for es in self._entries.values():
+            for e in es:
+                if e.id == id:
+                    e.expires_at = expires_at
+        self._save()
+
     def rules(self) -> list[Entry]:
         return self._active("rule")
 

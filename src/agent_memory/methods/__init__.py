@@ -16,3 +16,5 @@ from agent_memory.methods import reflect  # noqa: F401
 from agent_memory.methods.reflect import stage as _reflect  # noqa: F401
 from agent_memory.methods import overwrite  # noqa: F401
 from agent_memory.methods.overwrite import stage as _overwrite  # noqa: F401
+from agent_memory.methods import expire  # noqa: F401
+from agent_memory.methods.expire import stage as _expire  # noqa: F401
