@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 420" width="100%" role="img" aria-labelledby="t d">
+  <title id="t">The agent-memory pipeline</title>
+  <desc id="d">Events go through write, sort, recall, reflect and forget, and reflexion. Write and sort fill a store with three parts: RULES, FACTS and LOG. Recall reads the store into the agent prompt.</desc>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+    </marker>
+  </defs>
+  <g fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" font-family="'Comic Sans MS','Segoe Print',cursive,sans-serif" font-size="17">
+    <g fill="currentColor" fill-opacity="0.08">
+      <path d="M22,70 Q20,62 30,61 L158,59 Q168,60 168,70 L170,128 Q168,138 158,138 L30,140 Q20,139 21,128 Z"/>
+      <path d="M200,72 Q198,62 208,61 L336,60 Q346,61 346,71 L347,127 Q346,137 336,138 L208,140 Q198,139 199,128 Z"/>
+      <path d="M378,70 Q376,62 386,61 L514,59 Q524,60 524,70 L525,128 Q524,138 514,139 L386,140 Q376,139 377,128 Z"/>
+      <path d="M556,72 Q554,62 564,61 L692,60 Q702,61 702,71 L703,127 Q702,137 692,138 L564,140 Q554,139 555,128 Z"/>
+      <path d="M734,70 Q732,62 742,61 L870,59 Q880,60 880,70 L881,128 Q880,138 870,139 L742,140 Q732,139 733,128 Z"/>
+    </g>
+    <g fill="currentColor" stroke="none" text-anchor="middle">
+      <text x="95" y="92" font-weight="bold">1 write</text>
+      <text x="95" y="116" font-size="14">write_filter</text>
+      <text x="273" y="92" font-weight="bold">2 sort</text>
+      <text x="273" y="116" font-size="14">coala_stores</text>
+      <text x="451" y="92" font-weight="bold">3 recall</text>
+      <text x="451" y="116" font-size="14">tag / scored</text>
+      <text x="629" y="92" font-weight="bold">4 reflect, forget</text>
+      <text x="629" y="112" font-size="13">reflect, overwrite,</text>
+      <text x="629" y="128" font-size="13">expire, archive</text>
+      <text x="807" y="92" font-weight="bold">5 reflexion</text>
+      <text x="807" y="112" font-size="13">one retry after</text>
+      <text x="807" y="128" font-size="13">a failed check</text>
+    </g>
+    <path d="M170,100 L196,100" marker-end="url(#a)"/>
+    <path d="M348,100 L374,100" marker-end="url(#a)"/>
+    <path d="M526,100 L552,100" marker-end="url(#a)"/>
+    <path d="M704,100 L730,100" marker-end="url(#a)"/>
+    <text x="22" y="40" fill="currentColor" stroke="none" font-size="15">event (correction, decision, result)</text>
+    <path d="M60,46 L90,56" marker-end="url(#a)" stroke-dasharray="5 5"/>
+    <text x="640" y="40" fill="currentColor" stroke="none" font-size="15">agent prompt</text>
+    <path d="M451,142 Q451,200 520,262" stroke-dasharray="5 5" marker-start="url(#a)"/>
+    <path d="M451,60 Q451,30 560,30 L630,30" stroke-dasharray="5 5" marker-end="url(#a)"/>
+    <path d="M95,142 Q95,200 150,262" marker-end="url(#a)"/>
+    <path d="M273,142 Q273,200 273,262" marker-end="url(#a)"/>
+    <path d="M629,142 Q629,200 600,262" marker-end="url(#a)" marker-start="url(#a)"/>
+    <g fill="currentColor" fill-opacity="0.08">
+      <path d="M60,270 Q58,262 68,261 L912,259 Q922,260 922,270 L923,380 Q922,390 912,391 L68,392 Q58,391 59,380 Z" stroke-dasharray="8 6"/>
+    </g>
+    <text x="80" y="290" fill="currentColor" stroke="none" font-weight="bold">store (JSONL files plus a rendered MEMORY.md)</text>
+    <g fill="currentColor" fill-opacity="0.12">
+      <rect x="90" y="305" width="240" height="70" rx="8"/>
+      <rect x="360" y="305" width="240" height="70" rx="8"/>
+      <rect x="630" y="305" width="260" height="70" rx="8"/>
+    </g>
+    <g fill="currentColor" stroke="none" text-anchor="middle">
+      <text x="210" y="334" font-weight="bold">RULES</text>
+      <text x="210" y="358" font-size="14">always loaded, 20 lines max</text>
+      <text x="480" y="334" font-weight="bold">FACTS</text>
+      <text x="480" y="358" font-size="14">one entry per key, newest wins</text>
+      <text x="760" y="334" font-weight="bold">LOG</text>
+      <text x="760" y="358" font-size="14">dated events, searched when needed</text>
+    </g>
+  </g>
+</svg>

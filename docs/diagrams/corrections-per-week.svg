@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 420" width="100%" role="img" aria-labelledby="t d">
+  <title id="t">Corrections per week (empty template)</title>
+  <desc id="d">Empty axes for corrections per week over weeks 1 to 4, one line per config. No data yet.</desc>
+  <g fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" font-family="'Comic Sans MS','Segoe Print',cursive,sans-serif" font-size="16">
+    <path d="M90,50 Q88,200 91,330 Q300,333 720,331"/>
+    <g stroke-width="1.5" stroke-opacity="0.35" stroke-dasharray="4 6">
+      <path d="M91,250 L720,250"/><path d="M91,170 L720,170"/><path d="M91,90 L720,90"/>
+    </g>
+    <g stroke-width="2"><path d="M217,331 L217,339"/><path d="M349,331 L349,339"/><path d="M481,331 L481,339"/><path d="M613,331 L613,339"/></g>
+    <g fill="currentColor" stroke="none" text-anchor="middle">
+      <text x="217" y="360">week 1</text><text x="349" y="360">week 2</text>
+      <text x="481" y="360">week 3</text><text x="613" y="360">week 4</text>
+      <text x="400" y="30" font-size="20" font-weight="bold">Corrections per week, one line per config</text>
+      <text x="400" y="205" font-size="30" font-weight="bold" fill-opacity="0.55">no data yet</text>
+      <text x="400" y="235" font-size="15" fill-opacity="0.55">to be filled by the first measured runs</text>
+      <text x="400" y="395" font-size="15">simulated week (10 tasks each)</text>
+    </g>
+    <g fill="currentColor" stroke="none" text-anchor="end"><text x="80" y="336">0</text></g>
+    <text x="30" y="200" fill="currentColor" stroke="none" text-anchor="middle" transform="rotate(-90 30 200)">corrections</text>
+  </g>
+</svg>
