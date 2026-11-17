@@ -22,6 +22,8 @@ from agent_memory.core.review import Reviewer, rules_diff
 CONFIGS = Path(__file__).resolve().parents[2] / "configs"
 SIM_START = datetime(2026, 1, 5)  # a Monday
 SIM_SEED = 7  # the seed tasks.jsonl was generated with
+PER_CONFIG_CAP = 100_000  # spec: each simulation config stays under 100k tokens
+CACHE_NOTE = "shared across configs, so per-config tokens depend on run order"
 
 
 def make_llm(budget: TokenBudget) -> LLMClient:
@@ -63,7 +65,12 @@ def _counters(agent) -> dict:
     return out
 
 
-def _run_simulation(name: str, llm: LLMClient, store_dir: Path, results_dir: Path) -> bool:
+def _results_path(results_dir: Path, name: str) -> Path:
+    return results_dir / f"simulation_{name}.md"
+
+
+def _run_simulation(name: str, llm: LLMClient, store_dir: Path, results_dir: Path) -> SimulationAborted | None:
+    """Run one config and write its result; returns the abort, or None when it finished."""
     cfg = load_config(CONFIGS / f"{name}.toml")
     corrections = json.loads((DATA / "corrections.json").read_text(encoding="utf-8"))
     blocklist = json.loads((DATA / "blocklist.json").read_text(encoding="utf-8"))
@@ -74,22 +81,22 @@ def _run_simulation(name: str, llm: LLMClient, store_dir: Path, results_dir: Pat
     agent = build(cfg, llm=llm, store=store, check=sim_check(corrections),
                   **({"embedder": embedder} if embedder else {}))
     before = llm.budget.used
-    extra, ok = {}, True
+    extra, aborted = {"llm_cache": CACHE_NOTE}, None
     try:
         metrics = run_simulation(agent, tasks, SimClock(SIM_START), Reviewer([blocklist["marker"]]),
                                  store=store, corrections=corrections, blocklist=blocklist)
     except SimulationAborted as exc:
         print(f"{name}: {exc}", file=sys.stderr)
-        metrics, ok = exc.metrics, False
-        extra = {"partial": True, "completed_tasks": exc.completed_tasks, "crashed_tokens": exc.crashed_tokens}
-    path = results_dir / f"simulation_{name}.md"
+        metrics, aborted = exc.metrics, exc
+        extra |= {"partial": True, "completed_tasks": exc.completed_tasks, "crashed_tokens": exc.crashed_tokens}
+    path = _results_path(results_dir, name)
     write_result(path, eval_name="simulation", config=name, model=llm.model,
                  embedding_model=embedder.name if embedder else "none", subset=f"all {len(tasks)} tasks",
                  seed=SIM_SEED, tokens=llm.budget.used - before,
                  metrics={f"week {w}": m for w, m in metrics.items()},
                  extra={**extra, **_counters(agent)}, run_date=date.today().isoformat())
     print(f"{name}: wrote {path}")
-    return ok
+    return aborted
 
 
 def _run(args, parser) -> int:
@@ -120,16 +127,34 @@ def _run(args, parser) -> int:
     if est.needs_subset:
         print(f"refused: estimate above {SUBSET_THRESHOLD:,}, run a subset first", file=sys.stderr)
         return 2
-
-    llm = make_llm(TokenBudget(args.max_tokens))
+    # Every refusal below happens before an LLM client is built or a file is written.
+    if args.max_tokens is None:
+        print("refused: --no-estimate-only needs --max-tokens (the run's total token cap)", file=sys.stderr)
+        return 2
     out = args.out or Path(tempfile.mkdtemp(prefix="agent-memory-"))
     for n in names:
         if (out / n).exists():
             print(f"refused: {out / n} exists, a run needs a fresh store", file=sys.stderr)
             return 2
-        if not _run_simulation(n, llm, out / n, args.results_dir):
+        if _results_path(args.results_dir, n).exists() and not args.overwrite:
+            print(f"refused: {_results_path(args.results_dir, n)} exists (pass --overwrite to replace it)",
+                  file=sys.stderr)
+            return 2
+
+    remaining, code = args.max_tokens, 0
+    for i, n in enumerate(names):
+        budget = TokenBudget(min(PER_CONFIG_CAP, remaining))
+        aborted = _run_simulation(n, make_llm(budget), out / n, args.results_dir)
+        remaining -= budget.used
+        if aborted is None:
+            continue
+        code = 1
+        if not isinstance(aborted.__cause__, BudgetExceeded):
+            return 1  # a crash that is not a budget cap stops the run
+        if remaining <= 0 and i + 1 < len(names):
+            print(f"run budget spent, not run: {', '.join(names[i + 1:])}", file=sys.stderr)
             return 1
-    return 0
+    return code
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -144,7 +169,12 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--eval", choices=["simulation", "longmemeval"], required=True)
     run.add_argument("--configs", required=True, help="comma-separated config names from configs/")
     run.add_argument("--estimate-only", action=argparse.BooleanOptionalAction, default=True)
-    run.add_argument("--max-tokens", type=int)
+    run.add_argument("--max-tokens", type=int, help=(
+        f"required with --no-estimate-only: the run's total token cap. Each config also gets its own cap of "
+        f"min({PER_CONFIG_CAP:,}, what is left of the total). A config that hits its cap writes a PARTIAL result "
+        f"and the run goes on with the next config; the run stops once the total is spent or a config "
+        f"crashes for any other reason. Any partial result makes the exit code 1."))
+    run.add_argument("--overwrite", action="store_true", help="replace existing results files")
     run.add_argument("--out", type=Path, help="where the per-config stores go (default: a temp dir)")
     run.add_argument("--results-dir", type=Path, default=Path("results"))
     args = parser.parse_args(argv)

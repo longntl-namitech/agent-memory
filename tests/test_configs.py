@@ -24,9 +24,9 @@ def units(c: Config) -> dict:
             "reflect": "reflect" in c.reflect, "reflexion": "reflexion" in c.reflect, "forget": tuple(c.forget)}
 
 
-def stub_llm(tmp_path, budget=None, reply="SKIP"):
-    return LLMClient("stub", "stub-model", budget or TokenBudget(None), tmp_path / "llm",
-                     transport=lambda model, messages: (reply, 10, 5))
+def stub_llm(tmp_path, budget=None, reply="SKIP", cost=15, cache="llm"):
+    return LLMClient("stub", "stub-model", budget or TokenBudget(None), tmp_path / cache,
+                     transport=lambda model, messages: (reply, cost - 5, 5))
 
 
 class ToyEmbedder:
@@ -123,7 +123,7 @@ def test_run_writes_result_with_stub_llm(monkeypatch, tmp_path):
     assert cli.main(["run", "--eval", "simulation", "--configs", "full", "--no-estimate-only",
                      "--max-tokens", "500000", "--out", str(tmp_path / "stores"),
                      "--results-dir", str(results)]) == 0
-    assert budget_seen[0].max_tokens == 500000
+    assert budget_seen[0].max_tokens == cli.PER_CONFIG_CAP  # min(cap, 500000)
     text = (results / "simulation_full.md").read_text()
     assert "# simulation - full" in text and "PARTIAL" not in text
     assert "- model: stub-model" in text and "- seed: 7" in text
@@ -131,6 +131,7 @@ def test_run_writes_result_with_stub_llm(monkeypatch, tmp_path):
     reflexion = int(text.split("- reflexion_fallbacks: ")[1].split("\n")[0])
     assert reflexion > 0 and "- write_filter_fallbacks: " in text and "- reflect_failures: " in text
     assert "week 4" in text
+    assert "- llm_cache: shared across configs" in text
 
 
 def test_budget_blown_mid_run_writes_partial(monkeypatch, tmp_path):
@@ -143,3 +144,69 @@ def test_budget_blown_mid_run_writes_partial(monkeypatch, tmp_path):
     assert code != 0
     text = (results / "simulation_baseline_full_context.md").read_text()
     assert text.startswith("PARTIAL RESULT") and "- crashed_tokens: " in text and "- completed_tasks: " in text
+
+
+def run_args(tmp_path, configs, *extra):
+    return ["run", "--eval", "simulation", "--configs", configs, "--no-estimate-only",
+            "--out", str(tmp_path / "stores"), "--results-dir", str(tmp_path / "results"), *extra]
+
+
+def test_no_estimate_only_requires_max_tokens(monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr(cli, "make_llm", no_llm)
+    assert cli.main(run_args(tmp_path, "full")) == 2
+    assert "--max-tokens" in capsys.readouterr().err
+    assert not (tmp_path / "results").exists() and not (tmp_path / "stores").exists()
+
+
+def test_existing_result_refused_before_llm(monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr(cli, "make_llm", no_llm)
+    target = tmp_path / "results" / "simulation_full.md"
+    target.parent.mkdir()
+    target.write_text("complete result")
+    assert cli.main(run_args(tmp_path, "full", "--max-tokens", "500000")) == 2
+    assert str(target) in capsys.readouterr().err
+    assert target.read_text() == "complete result"
+
+
+def test_existing_result_replaced_with_overwrite(monkeypatch, tmp_path):
+    monkeypatch.setattr(cli, "make_llm", lambda budget: stub_llm(tmp_path, budget))
+    target = tmp_path / "results" / "simulation_full.md"
+    target.parent.mkdir()
+    target.write_text("old")
+    assert cli.main(run_args(tmp_path, "full", "--max-tokens", "500000", "--overwrite")) == 0
+    assert target.read_text().startswith("# simulation - full")
+
+
+def costly_then_cheap(tmp_path, costs):
+    """make_llm stand-in: the n-th config gets a stub costing costs[n] per call, with its own cache."""
+    built = []
+
+    def make(budget):
+        built.append(budget)
+        return stub_llm(tmp_path, budget, cost=costs[len(built) - 1], cache=f"llm{len(built)}")
+
+    return make, built
+
+
+def test_runaway_config_stops_at_its_cap_and_next_runs(monkeypatch, tmp_path):
+    make, built = costly_then_cheap(tmp_path, [20_000, 15])
+    monkeypatch.setattr(cli, "make_llm", make)
+    code = cli.main(run_args(tmp_path, "baseline_full_context,full", "--max-tokens", "1000000"))
+    assert code == 1  # a partial result makes the run exit non-zero
+    assert built[0].max_tokens == cli.PER_CONFIG_CAP and built[0].used > cli.PER_CONFIG_CAP
+    assert built[1].max_tokens == cli.PER_CONFIG_CAP
+    first = (tmp_path / "results" / "simulation_baseline_full_context.md").read_text()
+    second = (tmp_path / "results" / "simulation_full.md").read_text()
+    assert first.startswith("PARTIAL RESULT") and not second.startswith("PARTIAL")
+
+
+def test_run_stops_when_run_budget_spent(monkeypatch, tmp_path):
+    make, built = costly_then_cheap(tmp_path, [20_000, 20_000, 15])
+    monkeypatch.setattr(cli, "make_llm", make)
+    real = cli.estimate
+    monkeypatch.setattr(cli, "estimate", lambda *_a: real("simulation", []))  # estimate 0 passes the gate
+    code = cli.main(run_args(tmp_path, "baseline_full_context,full,b1_write_filter", "--max-tokens", "150000"))
+    assert code == 1
+    assert built[1].max_tokens == 150_000 - built[0].used  # the remainder, below the per-config cap
+    assert len(built) == 2
+    assert not (tmp_path / "results" / "simulation_b1_write_filter.md").exists()
