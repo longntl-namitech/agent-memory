@@ -58,3 +58,49 @@ def test_markdown_has_three_sections(tmp_path):
         assert h in md
     assert "be nice" in md
     assert (tmp_path / "MEMORY.md").read_text() == md
+
+
+def test_archived_log_hidden(tmp_path):
+    s = Store(tmp_path)
+    s.add(mk("l1", kind="log", text="gone-line"))
+    s.add(mk("l2", kind="log", text="kept-line"))
+    s.archive("l1")
+    assert [e.id for e in s.log()] == ["l2"]
+    md = s.render_markdown()
+    assert "gone-line" not in md and "kept-line" in md
+
+
+def test_upsert_requires_key(tmp_path):
+    s = Store(tmp_path)
+    for bad in (None, "", "  !! "):
+        with pytest.raises(ValueError):
+            s.upsert_fact(mk("a", key=bad))
+
+
+def test_upsert_overwrites_fields_keeps_identity(tmp_path):
+    s = Store(tmp_path)
+    s.upsert_fact(mk("a", key="k", tags=["x"], expires_at=T))
+    later = datetime(2026, 2, 1)
+    new = mk("b", key="k", text="n", tags=["y"], expires_at=later)
+    new.importance, new.last_used_at, new.created_at = 5, later, later
+    s.upsert_fact(new)
+    (f,) = s.facts()
+    assert (f.id, f.created_at) == ("a", T)
+    assert (f.text, f.tags, f.importance, f.expires_at, f.last_used_at) == ("n", ["y"], 5, later, later)
+
+
+def test_archived_rule_frees_slot(tmp_path):
+    s = Store(tmp_path)
+    for i in range(20):
+        s.add(mk(f"r{i}", kind="rule"))
+    s.archive("r0")
+    s.add(mk("r20", kind="rule"))
+    assert len(s.rules()) == 20
+
+
+def test_facts_filter_by_tag(tmp_path):
+    s = Store(tmp_path)
+    s.upsert_fact(mk("a", key="k1", tags=["x"]))
+    s.upsert_fact(mk("b", key="k2", tags=["y"]))
+    assert [e.id for e in s.facts("x")] == ["a"]
+    assert len(s.facts()) == 2

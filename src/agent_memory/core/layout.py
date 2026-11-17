@@ -80,9 +80,12 @@ class Store:
 
     def upsert_fact(self, e: Entry) -> None:
         e.key = slug(e.key or "")
+        if not e.key:
+            raise ValueError("fact needs a non-empty key")
         for old in self._active("fact"):
             if old.key == e.key:
-                old.text, old.last_used_at = e.text, e.last_used_at
+                for f in ("text", "tags", "importance", "expires_at", "last_used_at"):
+                    setattr(old, f, getattr(e, f))
                 self._save()
                 return
         self.add(e)
@@ -94,7 +97,7 @@ class Store:
         return [e for e in self._active("fact") if tag is None or tag in e.tags]
 
     def log(self) -> list[Entry]:
-        return list(self._entries["log"])
+        return self._active("log")
 
     def archive(self, id: str) -> None:
         for es in self._entries.values():
