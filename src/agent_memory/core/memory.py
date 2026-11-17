@@ -120,6 +120,14 @@ class StagedMemory:
             s.forget(self.store, now)
 
 
+# The task text every agent gets (lab MemoryAgent and Hermes alike), so they are compared on the same prompt.
+TASK_PROMPT = "Write the follow-up email for this lead. Reply with the email text only."
+
+
+def task_message(task: Task) -> str:
+    return TASK_PROMPT + "\n\n" + json.dumps({"lead": task.lead, "tags": task.tags}, ensure_ascii=False)
+
+
 Check = Callable[[Task, str], str | None]  # returns the failed check's name, or None on pass
 
 
@@ -141,7 +149,7 @@ class MemoryAgent(Agent):
         context = self.memory.recall(task, now)
         messages = [
             {"role": "system", "content": context},
-            {"role": "user", "content": json.dumps({"lead": task.lead, "tags": task.tags}, ensure_ascii=False)},
+            {"role": "user", "content": task_message(task)},
         ]
         first = output = self.llm.chat(messages, purpose="task").text
         failed = self.check(task, output) if self.check else None

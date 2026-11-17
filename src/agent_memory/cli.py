@@ -124,9 +124,11 @@ def _run_simulation(name: str, llm: LLMClient, store_dir: Path, results_dir: Pat
             extra |= {"partial": True, "completed_tasks": exc.completed_tasks, "crashed_tokens": crashed}
         if hermes:
             extra |= {"memory_size_per_week": {f"week {i}": s for i, s in enumerate(agent.memory_sizes, 1)},
-                      "failed_attempts": agent.failed_attempts}
+                      "failed_attempts": agent.failed_attempts, "planted_over_cap": agent.planted_over_cap}
         weeks = {f"week {w}": m for w, m in metrics.items()}
-        if cfg.memory:  # a whole-memory baseline recalls only the log, so the planted rule never reaches its prompt
+        # A whole-memory baseline recalls only the log, and Hermes with memory off loads no MEMORY.md,
+        # so the planted rule never reaches their prompt.
+        if cfg.memory or (hermes and not agent.memory_enabled):
             weeks = {w: dataclasses.asdict(m) | {"extra_from_wrong_rule": BASELINE_NA} for w, m in weeks.items()}
         path = _results_path(results_dir, name)
         write_result(path, eval_name="simulation", config=name, model=agent.model if hermes else llm.model,

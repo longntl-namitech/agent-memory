@@ -16,14 +16,14 @@ from pathlib import Path
 
 from agent_memory.core.layout import Entry
 from agent_memory.core.llm import TokenBudget
-from agent_memory.core.memory import Agent, AgentResult, Task
+from agent_memory.core.memory import Agent, AgentResult, Task, task_message
 from agent_memory.core.review import matches
 
 DELIM = "\n§\n"  # Hermes memory entry delimiter (memory_tool_store.py)
 MEMORY_CAP = 2_200  # memory.memory_char_limit default
 FAILED = "hermes_failed"
-PROMPT = "Write the follow-up email for this lead. Reply with the email text only."
 _KEY_ENV = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+REPO = Path(__file__).resolve().parents[4]  # a relative profile_root is taken from the repo root, not the cwd
 _EPOCH = datetime(1970, 1, 1)  # MEMORY.md keeps no timestamps; the adapter never reads the clock
 
 
@@ -89,7 +89,7 @@ class HermesAgent(Agent):
                  timeout: float = 600, budget: TokenBudget | None = None, env: dict | None = None):
         if key_env is not None and not _KEY_ENV.fullmatch(key_env):
             raise ValueError(f"key_env must be an environment variable name, got {key_env!r}")
-        self.profile_root = Path(profile_root).resolve()
+        self.profile_root = (REPO / profile_root).resolve()  # an absolute profile_root is kept as is
         self.model, self.memory_enabled, self.binary = model, memory_enabled, binary
         self.base_url, self.key_env, self.max_turns, self.timeout = base_url, key_env, max_turns, timeout
         self.budget = budget or TokenBudget(None)  # Hermes calls the model itself, so its usage is spent here
@@ -99,6 +99,7 @@ class HermesAgent(Agent):
         self.memory_path = self.profile_dir / "memories" / "MEMORY.md"
         self.llm = None  # no LLMClient: the simulation's crash pricing must not look for one
         self.failed_attempts = 0
+        self.planted_over_cap = False  # a plant that pushed MEMORY.md past its cap (kept, not refused)
         self.memory_sizes: list[int] = []  # MEMORY.md size at each Friday reflect, i.e. per week
         self.store = MemoryMdStore(self)
         self._pending: list[str] = []
@@ -114,6 +115,9 @@ class HermesAgent(Agent):
                                   timeout=self.timeout)
         except subprocess.TimeoutExpired as exc:
             raise HermesError(f"hermes {args[0]} timed out after {self.timeout}s") from exc
+        except FileNotFoundError as exc:
+            raise HermesError(f"hermes binary {self.binary!r} not found (PATH={self.env.get('PATH', '')}); "
+                              "set `binary` in the [hermes] config table") from exc
 
     def _checked(self, args: list[str], cwd: Path) -> subprocess.CompletedProcess:
         p = self._call(args, cwd)
@@ -149,6 +153,8 @@ class HermesAgent(Agent):
             return
         try:
             self._call(["profile", "delete", self.name, "-y"], self.profile_root)
+        except HermesError:
+            pass  # the rmtree below still removes the profile
         finally:
             shutil.rmtree(self.profile_dir, ignore_errors=True)  # make sure, even if delete failed
             self._started = False
@@ -167,7 +173,7 @@ class HermesAgent(Agent):
     # Agent protocol
 
     def _prompt(self, task: Task) -> str:
-        parts = [PROMPT, json.dumps({"lead": task.lead, "tags": task.tags}, ensure_ascii=False)]
+        parts = [task_message(task)]  # the same task text the lab MemoryAgent sends
         if self._pending:
             parts.append("Corrections from me on earlier emails:\n" + "\n".join(f"- {t}" for t in self._pending))
         return "\n\n".join(parts)
@@ -230,9 +236,10 @@ class HermesAgent(Agent):
         return len(self.memory_path.read_text(encoding="utf-8")) if self.memory_path.exists() else 0
 
     def plant_rule(self, text: str) -> None:
+        # Never refused: a raise would abort the whole run. Hermes' own entries stay; T24 checks Hermes over the cap.
         entries = self.memory_entries() + [text.strip()]
         if len(DELIM.join(entries)) > MEMORY_CAP:
-            raise ValueError(f"planting would push MEMORY.md over its {MEMORY_CAP:,}-character cap")
+            self.planted_over_cap = True
         self.write_memory(entries)
 
     def review(self, blocklist) -> list[str]:

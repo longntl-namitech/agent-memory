@@ -8,10 +8,10 @@ import pytest
 
 from agent_memory.core.eval.checks import check
 from agent_memory.core.layout import Entry
-from agent_memory.core.llm import BudgetExceeded, TokenBudget
-from agent_memory.core.memory import Task
+from agent_memory.core.llm import BudgetExceeded, LLMClient, TokenBudget
+from agent_memory.core.memory import TASK_PROMPT, MemoryAgent, Task
 from agent_memory.core.review import Reviewer
-from agent_memory.methods.hermes.adapter import HermesAgent, HermesError, MemoryMdStore
+from agent_memory.methods.hermes.adapter import REPO, HermesAgent, HermesError, MemoryMdStore
 
 FAKE = str(Path(__file__).resolve().parents[1] / "fixtures" / "fake_hermes.sh")
 NOW = datetime(2026, 1, 5, 9)
@@ -198,11 +198,50 @@ def test_plant_and_review(home, tmp_path):
         assert agent.memory_path.read_text() == "Always sign off as Sam."
 
 
-def test_plant_over_cap_raises(home, tmp_path):
+def test_plant_over_cap_plants_anyway_and_flags(home, tmp_path):
     with make(home, tmp_path) as agent:
-        agent.plant_rule("x" * 2000)
-        with pytest.raises(ValueError, match="2,200"):
-            agent.plant_rule("y" * 300)
+        agent.plant_rule("x" * 2150)
+        assert agent.planted_over_cap is False
+        agent.plant_rule(PLANTED)  # would pass 2,200: planted, nothing of Hermes' own deleted, flagged
+        assert agent.memory_entries() == ["x" * 2150, PLANTED] and agent.memory_size() > 2200
+        assert agent.planted_over_cap is True
+
+
+def test_lab_and_hermes_get_the_same_task_text(home, tmp_path):
+    seen = []
+    llm = LLMClient("stub", "stub-model", TokenBudget(None), tmp_path / "llm",
+                    transport=lambda model, messages: (seen.append(messages) or "Hi", 1, 1))
+
+    class NoMemory:
+        def recall(self, task, now):
+            return ""
+
+    MemoryAgent(NoMemory(), llm).run_task(TASK, NOW)
+    lab = seen[0][-1]["content"]
+    with make(home, tmp_path) as agent:
+        agent.receive_correction("Quote prices excl. VAT.", NOW)
+        agent.run_task(TASK, NOW)
+    hermes = runs(tmp_path)[0][runs(tmp_path)[0].index("-z") + 1]
+    lead = json.dumps({"lead": TASK.lead, "tags": TASK.tags}, ensure_ascii=False)
+    assert lab == TASK_PROMPT + "\n\n" + lead
+    assert hermes.startswith(lab) and "Quote prices excl. VAT." in hermes[len(lab):]
+
+
+def test_relative_profile_root_is_taken_from_the_repo_root(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    agent = HermesAgent(Path(".hermes-home"), "m", True, binary=FAKE)
+    assert agent.profile_root == REPO / ".hermes-home" and REPO == Path(__file__).resolve().parents[2]
+    assert HermesAgent(tmp_path / "hh", "m", True).profile_root == (tmp_path / "hh").resolve()
+
+
+def test_missing_binary_gives_clear_error(home, tmp_path):
+    agent = HermesAgent(home, "m", True, binary="no-such-hermes-binary", env={"PATH": "/nowhere"})
+    with pytest.raises(HermesError, match="no-such-hermes-binary.*PATH=/nowhere"):
+        agent.version()
+    with pytest.raises(HermesError, match="no-such-hermes-binary"):
+        with agent:
+            agent.run_task(TASK, NOW)
+    assert profiles(home) == []
 
 
 def test_store_surface_works_with_reviewer(home, tmp_path):

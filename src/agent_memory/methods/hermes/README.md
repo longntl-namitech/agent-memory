@@ -14,8 +14,8 @@ control, built-in stores off). Checked against Hermes v0.23.2, see `docs/hermes-
   and then removes the directory if it is still there.
 - One fresh session per task:
   `hermes -p NAME -z PROMPT --usage-file PATH --provider custom -m MODEL -t memory,file,skills,todo`
-  (`-t file,skills,todo` without memory). The prompt is a one-line instruction, the lead as JSON, and the
-  corrections received since the last task as user text. Memory persists across tasks only through the profile.
+  (`-t file,skills,todo` without memory). The prompt is the lab's own task text (`TASK_PROMPT` plus the lead
+  JSON, shared with MemoryAgent), then the corrections received since the last task as user text. Memory persists across tasks only through the profile.
 - Exit codes: 0 is the email. 2 (failed or partial) and 1 (no text) are failed attempts: `output` is `""`,
   `failed_check` is `hermes_failed` and `failed_attempts` goes up; the runner scores the empty output against the
   active rules, so it counts as violations, never as a passing email. A failed attempt does not stop the run.
@@ -24,8 +24,10 @@ control, built-in stores off). Checked against Hermes v0.23.2, see `docs/hermes-
 - Tokens come from the usage file: `total_including_auxiliary.total_tokens`, else `total_tokens`, else input plus
   output. They are spent on the run's `TokenBudget` after each task, so the per-config cap is enforced on Hermes's
   own usage (`BudgetExceeded`, partial result). `receive_correction`, `end_task` and `reflect` spend 0.
-- `MEMORY.md` plumbing for the simulation: `plant_rule` appends an entry (delimiter `\n§\n`, refused above the
-  2,200-character cap); `review(blocklist)` removes every entry holding a marker, case and whitespace ignored, so
+- `MEMORY.md` plumbing for the simulation: `plant_rule` appends an entry (delimiter `\n§\n`). It is never
+  refused: if the file would pass its 2,200-character cap, the rule is planted anyway, none of Hermes' own entries
+  are deleted, and the result records `planted_over_cap: true` (`false` otherwise). What Hermes does with a file
+  over its cap is verified by the T24 pilot; `review(blocklist)` removes every entry holding a marker, case and whitespace ignored, so
   a rule Hermes rewrote with `patch` is still caught. `agent.store` (`MemoryMdStore`) gives the runner and the
   Monday Reviewer the `add` / `rules` / `all_rules` / `archive` surface over the same file, so the real file
   changes are what is counted. `memory_size()` is the file's character count, recorded at each Friday reflect
@@ -34,7 +36,8 @@ control, built-in stores off). Checked against Hermes v0.23.2, see `docs/hermes-
 
 ## Isolation
 
-- `HERMES_HOME` is the isolated `profile_root` (`.hermes-home`), never `~/.hermes`.
+- `HERMES_HOME` is the isolated `profile_root` (`.hermes-home`), never `~/.hermes`. A relative `profile_root`
+  is taken from the repo root, not the cwd. A missing binary raises `HermesError` naming the binary and PATH.
 - No `--ignore-user-config`: it freezes built-in defaults, which would ignore `memory_enabled: false` and the
   endpoint in the profile config. The fresh profile with an adapter-written `config.yaml` gives the same isolation.
 - No `--ignore-rules`: it also skips memory, the thing under test. No `terminal` toolset.
@@ -46,7 +49,9 @@ control, built-in stores off). Checked against Hermes v0.23.2, see `docs/hermes-
 ## Reproducibility
 
 Hermes calls the model itself and reads real time, so its runs are not cache-reproducible. The result records the
-Hermes version (`hermes --version`), `failed_attempts` and `memory_size_per_week`. The number of runs and their
+Hermes version (`hermes --version`), `failed_attempts`, `planted_over_cap` and
+`memory_size_per_week`. With memory off (`hermes_no_memory`) `extra_from_wrong_rule` is `n/a`, as for the
+whole-memory baselines: no MEMORY.md is loaded, so the planted rule never reaches the prompt. The number of runs and their
 spread are filled by the pilot (T24).
 
 ## Unverified until the pilot (T24)

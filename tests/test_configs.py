@@ -300,7 +300,9 @@ def test_hermes_run_writes_result_and_deletes_profile(monkeypatch, tmp_path):
     assert "- tokens: 50000" in text  # 40 tasks x 1,250 from the usage file
     assert "- hermes_version: 0.23.2" in text and "- reproducibility: not cache-reproducible" in text
     assert "- failed_attempts: 0" in text and "- memory_size_per_week:" in text and "week 4" in text
-    assert "llm_cache" not in text
+    assert "llm_cache" not in text and "- planted_over_cap: False" in text
+    values = [ln.split(": ", 1)[1] for ln in text.splitlines() if "- extra_from_wrong_rule: " in ln]
+    assert len(values) == 4 and all(v.isdigit() for v in values)  # memory on: MEMORY.md holds the planted rule
     assert no_profiles(home)
 
 
@@ -334,6 +336,8 @@ def test_hermes_failed_attempts_counted(monkeypatch, tmp_path):
     assert cli.main(run_args(tmp_path, "hermes_no_memory", "--max-tokens", "500000")) == 0
     text = (tmp_path / "results" / "simulation_hermes_no_memory.md").read_text()
     assert "- failed_attempts: 40" in text
+    values = [ln.split(": ", 1)[1] for ln in text.splitlines() if "- extra_from_wrong_rule: " in ln]
+    assert values == ["n/a (baseline has no RULES)"] * 4  # memory off: the planted rule never reaches the prompt
     assert no_profiles(home)
 
 
