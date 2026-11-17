@@ -8,7 +8,7 @@
 
 ### Added
 
-- First measured results in `results/`: simulation for 14 lab + 2 Hermes configs, LongMemEval 8-question subset for 3 configs (`lme_b3_scored_recall`, `lme_full`, `lme_baseline_naive_rag`).
+- First measured results in `results/`: simulation for 14 lab + 2 Hermes configs, LongMemEval 8-question subset for all 6 configs (`lme_b1_write_filter`, `lme_b2_coala_stores`, `lme_b3_scored_recall`, `lme_full`, `lme_baseline_naive_rag`, `lme_baseline_full_context`).
 - Repo scaffold.
 - Core: clock, store layout (RULES, FACTS, LOG), LLM client with token budget, embedder with disk cache, TOML config loading, stage registry and token estimator.
 - Simulation runner for the 4-week email follow-up agent (40 tasks) with a scripted reviewer.
@@ -31,5 +31,4 @@
 
 - The 3-run spread for Hermes.
 - The full 50-question LongMemEval run.
-- `lme_b1_write_filter`, `lme_b2_coala_stores` and `lme_baseline_full_context`.
 - A per-config pass over more seeds.

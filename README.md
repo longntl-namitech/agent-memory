@@ -148,19 +148,19 @@ All 14 lab configs and the 2 Hermes configs ran all 40 tasks (no PARTIAL result)
 
 Subset of 8 questions from the 50 selected (seed 7). One question is 12.5 points, so these differences are within noise. Judge: `gpt-5.4-nano` with the LongMemEval prompts, not the official one.
 
-| Ability | `lme_b3_scored_recall` | `lme_full` | `lme_baseline_naive_rag` |
-|---|---|---|---|
-| information extraction (2) | 1/2 | 1/2 | 1/2 |
-| multi-session reasoning (2) | 0/2 | 0/2 | 1/2 |
-| knowledge updates (2) | 0/2 | 0/2 | 0/2 |
-| temporal reasoning (1) | 0/1 | 0/1 | 0/1 |
-| abstention (1) | 1/1 | 1/1 | 1/1 |
-| all (8) | 2/8 (25%) | 2/8 (25%) | 3/8 (38%) |
-| tokens | 899,041 | 0 | 107,781 |
+| Ability | `lme_b1_write_filter` | `lme_b2_coala_stores` | `lme_b3_scored_recall` | `lme_full` | `lme_baseline_naive_rag` | `lme_baseline_full_context` |
+|---|---|---|---|---|---|---|
+| information extraction (2) | 0/2 | 0/2 | 1/2 | 1/2 | 1/2 | 1/2 |
+| multi-session reasoning (2) | 0/2 | 0/2 | 0/2 | 0/2 | 1/2 | 0/2 |
+| knowledge updates (2) | 0/2 | 0/2 | 0/2 | 0/2 | 0/2 | 0/2 |
+| temporal reasoning (1) | 0/1 | 0/1 | 0/1 | 0/1 | 0/1 | 0/1 |
+| abstention (1) | 1/1 | 1/1 | 1/1 | 1/1 | 1/1 | 1/1 |
+| all (8) | 1/8 (12%) | 1/8 (12%) | 2/8 (25%) | 2/8 (25%) | 3/8 (38%) | 2/8 (25%) |
+| tokens | 2,628 | 0 | 899,041 | 0 | 107,781 | 820,344 |
 
-Files: [`lme_b3_scored_recall`](results/longmemeval_lme_b3_scored_recall.md), [`lme_full`](results/longmemeval_lme_full.md), [`lme_baseline_naive_rag`](results/longmemeval_lme_baseline_naive_rag.md).
+Files: [`lme_b1_write_filter`](results/longmemeval_lme_b1_write_filter.md), [`lme_b2_coala_stores`](results/longmemeval_lme_b2_coala_stores.md), [`lme_b3_scored_recall`](results/longmemeval_lme_b3_scored_recall.md), [`lme_full`](results/longmemeval_lme_full.md), [`lme_baseline_naive_rag`](results/longmemeval_lme_baseline_naive_rag.md), [`lme_baseline_full_context`](results/longmemeval_lme_baseline_full_context.md).
 
-Not run: `lme_b1_write_filter`, `lme_b2_coala_stores` and `lme_baseline_full_context`. The full 50-question run was NOT done: it is above the 5,000,000 token rule and needs the user's go-ahead.
+All six `lme_*` configs ran on the 8-question subset. `lme_b1_write_filter` and `lme_b2_coala_stores` are the no-memory floor: they recall an empty memory, and only the abstention question is answered correctly. `lme_baseline_full_context` used 820,344 tokens. `lme_b1_write_filter` and `lme_b2_coala_stores` show 2,628 and 0 tokens only because their ingestion was cached from `lme_b3_scored_recall` (token counts depend on run order). One question is 12.5 points, so all differences are within noise. The full 50-question run was NOT done: it is above the 5,000,000 token rule and needs the user's go-ahead.
 
 ### Hermes Agent
 
