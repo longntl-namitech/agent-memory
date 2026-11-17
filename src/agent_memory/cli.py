@@ -231,9 +231,9 @@ PILOT_CAVEATS = [
     "(memory off has a shorter prompt), so it is a rough planning number: run the pilot for hermes_no_memory too "
     "if it matters",
     "the token cap is checked after each task, so one task can overshoot it",
-    "each Hermes call costs about 6k tokens of fixed system prompt and tools even for a trivial prompt (measured in "
-    "the first real call: 6,301 tokens), so a 40-task run is at least about 250k tokens, above the 100,000 "
-    "per-config default; the spec allows raising the cap for Hermes only, use `--per-config-cap` on `run`",
+    "the first real pilot (3 tasks, -t memory,file,todo) measured 4,824 / 4,846 / 4,861 tokens, mean 4,844 tokens "
+    "per task, so a 40-task run is about 194,000 (193,747), a lower bound, far above the 100,000 per-config "
+    "default; the spec allows raising the cap for Hermes only, `run` needs an explicit `--per-config-cap`",
 ]
 
 

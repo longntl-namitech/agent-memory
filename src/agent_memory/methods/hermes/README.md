@@ -50,7 +50,7 @@ control, built-in stores off). Checked against Hermes v0.23.2, see `docs/hermes-
 - `MEMORY.md` plumbing for the simulation (`<data root>/memories/MEMORY.md`): `plant_rule` appends an entry (delimiter `\n§\n`). It is never
   refused: if the file would pass its 2,200-character cap, the rule is planted anyway, none of Hermes' own entries
   are deleted, and the result records `planted_over_cap: true` (`false` otherwise). What Hermes does with a file
-  over its cap is verified by the T24 pilot; `review(blocklist)` removes every entry holding a marker, case and whitespace ignored, so
+  over its cap is UNVERIFIED; `review(blocklist)` removes every entry holding a marker, case and whitespace ignored, so
   a rule Hermes rewrote with `patch` is still caught. `agent.store` (`MemoryMdStore`) gives the runner and the
   Monday Reviewer the `add` / `rules` / `all_rules` / `archive` surface over the same file, so the real file
   changes are what is counted. `memory_size()` is the file's character count, recorded at each Friday reflect
@@ -75,25 +75,32 @@ control, built-in stores off). Checked against Hermes v0.23.2, see `docs/hermes-
 Hermes calls the model itself and reads real time, so its runs are not cache-reproducible. The result records the
 Hermes version (`hermes --version`), `failed_attempts`, `planted_over_cap` and
 `memory_size_per_week`. With memory off (`hermes_no_memory`) `extra_from_wrong_rule` is `n/a`, as for the
-whole-memory baselines: no MEMORY.md is loaded, so the planted rule never reaches the prompt. The number of runs and their
-spread are filled by the pilot (T24).
+whole-memory baselines: no MEMORY.md is loaded, so the planted rule never reaches the prompt. The 3-runs spread is not produced
+by the pilot (it runs one config for a few tasks); it needs the real runs.
 
 ## Verified and unverified
 
 Verified by the first real calls (see `docs/hermes-flags.md`): the key via `key_env` authenticates with a dedicated
 data root (`key_env` defaults to `OPENAI_API_KEY`, `base_url` to `$OPENAI_BASE_URL`); the usage file shape; exit 2
-with `null` token fields on a missing key; `-t` and `--provider custom` are accepted. A trivial call costs about
-6.3k tokens (fixed system prompt and tools), so a 40-task run is at least about 250k tokens, above the 100,000
-per-config default; raise it for Hermes with `--per-config-cap`.
+with `null` token fields on a missing key; `-t` and `--provider custom` are accepted.
+
+Measured by the first real pilot (3 tasks of `hermes_default`, run with `-t memory,file,todo` before `file` was
+dropped): 4,824 / 4,846 / 4,861 tokens, mean 4,844 per task; extrapolated 193,747 per 40-task run, 1,162,482 for 6
+runs, 387,494 for 1 run per config. These are lower bounds (no corrections, no planted rule, empty MEMORY.md), far
+above the 100,000 per-config default: `run` refuses a Hermes config without an explicit `--per-config-cap` (the
+spec allows raising it for Hermes only).
 
 Still unverified:
 
+- Wipe-then-reuse of a data root without a re-bootstrap (wiping `logs/`, `sessions/`, `state.db` and the rest):
+  only one real run exists so far.
+- What Hermes does with a MEMORY.md above its 2,200-character cap.
 - The real exit codes 1 (empty reply) and 130 (interrupt), and the code for a turn-cap stop.
-- That wiping `logs/`, `sessions/` and `state.db` between runs causes no re-bootstrap of the runtime (to be
-  verified by the real pilot).
+- A memory write (`add`, `patch`) made by the model in a real run.
+- The 3-runs spread (the pilot does not produce it).
 - That stdout of `hermes -z` is the email text only.
-- That `memory_enabled: false` removes the memory tool and block, and that `-t` leaves no terminal access.
+- That `memory_enabled: false` removes the memory tool and block, and that `-t` leaves no terminal or file
+  access.
 - That a `MEMORY.md` written by the adapter (entries joined by `\n§\n`, nothing else) is read by Hermes as is.
-- That the `hermes pm repair` notice seen once does not block a real run.
 
 All tests run against `tests/fixtures/fake_hermes.sh`, a stub; nothing here has called the real binary.

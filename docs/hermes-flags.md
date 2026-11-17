@@ -36,9 +36,16 @@ never printed or written) changed the adapter design. Facts:
    key `install_home`), and a failing `--version` gives `unknown (hermes --version exited N)` instead of stopping
    the run. The only other call outside `-z` is `gateway stop`, whose failure is ignored.
 
+Measured by the first real pilot (3 tasks of `hermes_default`, `-t memory,file,todo`, before `file` was dropped):
+4,824 / 4,846 / 4,861 tokens, mean 4,844 per task; extrapolated 193,747 per 40-task run, 1,162,482 for 6 runs,
+387,494 for 1 run per config, all lower bounds. (The 6,301 of fact 2 was a single trivial call with `skills`
+still in `-t`.)
+
 Verified by these calls: the real usage JSON shape; exit 2 with null usage on a missing key; the key via the
 environment works with a dedicated data root; `-t` accepted; `--provider custom` accepted. Still UNVERIFIED: exit
-codes 1 and 130 in practice, `memory_enabled: false` removing the memory tool, a `memory` tool write by the model.
+codes 1 and 130 in practice, `memory_enabled: false` removing the memory tool, a `memory` tool write by the model,
+wipe-then-reuse of a data root without a re-bootstrap, behaviour above the 2,200-character MEMORY.md cap, and the
+3-runs spread (the pilot does not produce it).
 
 The adapter now uses one dedicated data root per config (`.hermes-lab/<config>`), no `-p`, no
 `hermes profile create/delete`. The run state it wipes at start and at close, as paths under `$HERMES_HOME`, each
@@ -203,4 +210,7 @@ accounting use `total_including_auxiliary.total_tokens`, because auxiliary calls
   (code reads the flag at `memory_tool.py:305-309`; not exercised).
 - `-t memory,todo` leaves no terminal or file access (the flag is accepted; toolset contents read, not run).
 - A `memory` tool write (`add`, `patch`) made by the model in a real run.
-- That the `hermes pm repair` notice does not block a real run.
+- Wipe-then-reuse of a data root without a re-bootstrap (only one real run exists).
+- What Hermes does with a MEMORY.md above its 2,200-character cap.
+- The 3-runs spread (the pilot does not produce it).
+- The `hermes pm repair` notice blocks `--version` in a fresh data root (finding 5), not `-z`.
