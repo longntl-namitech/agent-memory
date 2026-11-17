@@ -10,7 +10,7 @@ _LINK = re.compile(r"https?://cal\.brightpath\.example/\S*")
 
 
 _NOISE = string.whitespace + string.punctuation  # also covers quotes and markdown * _
-_EX_VAT = re.compile(r"\b(excl\.?|exclusive of|ex|without)\s+VAT\b", re.IGNORECASE)
+_EX_VAT = re.compile(r"\b(excl(uding|usive of)?|ex|without)\.?[\s-]*VAT\b", re.IGNORECASE)
 
 
 def normalise_skip(output: str) -> bool:

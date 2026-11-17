@@ -1,3 +1,5 @@
+import pytest
+
 from agent_memory.core.eval.checks import check, normalise_skip
 from agent_memory.core.memory import Task
 
@@ -74,3 +76,14 @@ def test_closed_lead_rules_when_closed_deals_inactive():
 def test_skip_markdown_and_quotes():
     assert normalise_skip("**SKIP**") and normalise_skip('"SKIP"')
     assert not normalise_skip("SKIP - closed")
+
+
+@pytest.mark.parametrize(
+    "phrase,ok",
+    [(p, True) for p in ["excl. VAT", "Excl VAT", "excl.VAT", "excluding VAT", "exclusive of VAT",
+                         "ex VAT", "ex-VAT", "Ex. VAT", "without VAT"]]
+    + [(p, False) for p in ["incl. VAT", "including VAT", "plus 20% VAT", "VAT", "next VAT", "index VAT"]],
+)
+def test_vat_wording(phrase, ok):
+    out = check(task(), good().replace("excl. VAT", phrase), ALL)
+    assert out == ([] if ok else ["vat"])
