@@ -109,3 +109,34 @@ def full_context_subset(rows: list[dict], n: int = 10) -> list[dict]:
         pool = sorted((r for r in rows if ability(r) == a), key=lambda r: r["question_id"])
         out += pool[: n // len(ABILITIES)]
     return out
+
+
+def first_questions(rows: list[dict], n: int) -> list[dict]:
+    """First `n` of `rows` stratified evenly: round-robin over the abilities, each pool by question_id."""
+    pools = [sorted((r for r in rows if ability(r) == a), key=lambda r: r["question_id"]) for a in ABILITIES]
+    out = []
+    for i in range(max(map(len, pools), default=0)):
+        out += [p[i] for p in pools if i < len(p)]
+    return out[:n]
+
+
+def load_selected(cache: Path, per_ability: int = 10, seed: int = 7, download_fn=None) -> list[dict]:
+    """The selected rows, from a small `.cache/longmemeval_selected_<per>_<seed>.json` written on first use.
+
+    The big s_cleaned file is json-loaded only when the small file is missing. `download_fn(cache)` fetches it
+    when it is missing too; without one a missing file raises FileNotFoundError.
+    """
+    cache = Path(cache)
+    small = cache / f"longmemeval_selected_{per_ability}_{seed}.json"
+    if not small.exists():
+        src = cache / FILES[0]
+        if not src.exists():
+            if download_fn is None:
+                raise FileNotFoundError(f"{src} is missing; pass --download to fetch it")
+            src = download_fn(cache)
+        rows = select_subset(json.loads(Path(src).read_text(encoding="utf-8")), per_ability, seed)
+        fd, tmp = tempfile.mkstemp(dir=cache, suffix=".tmp")
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(rows, f, ensure_ascii=False)
+        os.replace(tmp, small)
+    return json.loads(small.read_text(encoding="utf-8"))

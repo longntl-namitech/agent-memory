@@ -1,0 +1,7 @@
+name = "lme_b2_coala_stores"
+
+[write]
+stage = "write_filter"
+
+[sort]
+stage = "coala_stores"

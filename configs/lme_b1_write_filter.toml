@@ -1,0 +1,4 @@
+name = "lme_b1_write_filter"
+
+[write]
+stage = "write_filter"

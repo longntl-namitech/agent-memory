@@ -6,6 +6,7 @@ from agent_memory.core.llm import BudgetExceeded
 
 SUBSET_THRESHOLD = 5_000_000
 LME_QUESTIONS = 50
+LME_FULL_CONTEXT_QUESTIONS = 10  # spec: full_context runs on about 10 questions
 LME_INGEST_TOKENS_PER_QUESTION = 115_000  # spec: ingestion is all prompt tokens
 SIM_TASKS = 40
 # Spec gives no simulation per-task figure; 2,500 = the 100k per-config cap / 40 tasks.
@@ -32,17 +33,26 @@ class Estimate:
         return self.total > SUBSET_THRESHOLD
 
 
-def estimate(eval_name: str, config_names: list[str]) -> Estimate:
-    if eval_name == "longmemeval":
-        p, c = LME_QUESTIONS * LME_INGEST_TOKENS_PER_QUESTION, 0
-    elif eval_name == "simulation":
-        p, c = SIM_TASKS * SIM_PROMPT_PER_TASK, SIM_TASKS * SIM_COMPLETION_PER_TASK
-    else:
+def estimate(eval_name: str, config_names: list[str], questions: int | None = None,
+             full_context_questions: int = LME_FULL_CONTEXT_QUESTIONS) -> Estimate:
+    """`questions` (LongMemEval only) is the subset size; full_context configs run on at most
+    `full_context_questions` of them. Each config is counted in full, though configs sharing a write stage
+    share the ingestion cache: an upper bound."""
+    def cost(name: str) -> tuple[int, int]:
+        if name.startswith("hermes"):
+            return 0, 0  # Hermes prompts are not ours; T24 measures it with a pilot.
+        if eval_name == "longmemeval":
+            n = questions or LME_QUESTIONS
+            if "full_context" in name:
+                n = min(n, full_context_questions)
+            return n * LME_INGEST_TOKENS_PER_QUESTION, 0
+        return SIM_TASKS * SIM_PROMPT_PER_TASK, SIM_TASKS * SIM_COMPLETION_PER_TASK
+
+    if eval_name not in ("longmemeval", "simulation"):
         raise ValueError(f"unknown eval: {eval_name}")
-    # Hermes prompts are not ours; T24 measures it with a pilot.
-    ours = [n for n in config_names if not n.startswith("hermes")]
-    by_config = {n: (0 if n.startswith("hermes") else p + c) for n in config_names}
-    return Estimate(p * len(ours), c * len(ours), by_config)
+    costs = {n: cost(n) for n in config_names}
+    return Estimate(sum(p for p, _ in costs.values()), sum(c for _, c in costs.values()),
+                    {n: p + c for n, (p, c) in costs.items()})
 
 
 def gate(est: Estimate, max_tokens: int | None, estimate_only: bool = True) -> None:

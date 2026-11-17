@@ -12,11 +12,15 @@ from agent_memory.core.clock import SimClock
 from agent_memory.core.config import build, load_config
 from agent_memory.core.eval.checks import check
 from agent_memory.core.eval.estimate import SUBSET_THRESHOLD, EstimateOnly, estimate, gate
+from agent_memory.core.eval.lme_run import LMEAborted, check_lme_config, run_longmemeval
+from agent_memory.core.eval.longmemeval import (ABILITIES, ability, download, first_questions,
+                                                full_context_subset, load_selected)
 from agent_memory.core.eval.report import write_result
 from agent_memory.core.eval.simulation import DATA, SimulationAborted, active_rules, run_simulation
 from agent_memory.core.layout import Store
 from agent_memory.core.llm import BudgetExceeded, LLMClient, TokenBudget
 from agent_memory.core.memory import Check, Task
+from agent_memory.core.registry import ConfigError
 from agent_memory.core.review import Reviewer, rules_diff
 
 CONFIGS = Path(__file__).resolve().parents[2] / "configs"
@@ -24,6 +28,11 @@ SIM_START = datetime(2026, 1, 5)  # a Monday
 SIM_SEED = 7  # the seed tasks.jsonl was generated with
 PER_CONFIG_CAP = 100_000  # spec: each simulation config stays under 100k tokens
 CACHE_NOTE = "shared across configs, so per-config tokens depend on run order"
+LME_CACHE = Path(".cache")
+LME_PER_ABILITY = 10
+LME_SEED = 7
+SUBSET_LIMIT = 1_000_000  # global rule: above 5M, first run a subset under 1M, then ask before the full set
+JUDGE_NOTE = "{model} LLM judge (LongMemEval-style prompts), not comparable with the official GPT-4o judge"
 
 
 def make_llm(budget: TokenBudget) -> LLMClient:
@@ -99,14 +108,85 @@ def _run_simulation(name: str, llm: LLMClient, store_dir: Path, results_dir: Pat
     return aborted
 
 
+def _lme_table(result: dict) -> str:
+    rows = ["| ability | correct | total | accuracy |", "| --- | --- | --- | --- |"]
+    for a, v in [*result["by_ability"].items(), ("all", result)]:
+        rows.append(f"| {a} | {v['correct']} | {v['total']} | {v['correct'] / v['total']:.0%} |"
+                    if v["total"] else f"| {a} | 0 | 0 | - |")
+    return "\n".join(rows)
+
+
+def _lme_results_path(results_dir: Path, name: str) -> Path:
+    return results_dir / f"longmemeval_{name}.md"
+
+
+def _run_lme(args, names: list[str], est) -> int:
+    """LongMemEval: one shared budget of --max-tokens; a failed config writes a PARTIAL result and stops the run."""
+    if est.needs_subset and not args.confirm_full:
+        print(f"refused: estimate above {SUBSET_THRESHOLD:,}. Run a subset under {SUBSET_LIMIT:,} first "
+              f"(--questions 8), then ask before the full set and pass --confirm-full", file=sys.stderr)
+        return 2
+    if args.max_tokens is None:
+        print("refused: --no-estimate-only needs --max-tokens (the run's total token cap)", file=sys.stderr)
+        return 2
+    cfgs = {n: load_config(CONFIGS / f"{n}.toml") for n in names}
+    try:
+        for c in cfgs.values():
+            check_lme_config(c)
+    except ConfigError as exc:
+        print(f"refused: {exc}", file=sys.stderr)
+        return 2
+    out = args.out or Path(tempfile.mkdtemp(prefix="agent-memory-"))
+    for n in names:
+        if (out / n).exists():
+            print(f"refused: {out / n} exists, a run needs a fresh store", file=sys.stderr)
+            return 2
+        if _lme_results_path(args.results_dir, n).exists() and not args.overwrite:
+            print(f"refused: {_lme_results_path(args.results_dir, n)} exists (pass --overwrite to replace it)",
+                  file=sys.stderr)
+            return 2
+    try:
+        selected = load_selected(LME_CACHE, LME_PER_ABILITY, LME_SEED,
+                                 download_fn=download if args.download else None)
+    except FileNotFoundError as exc:
+        print(f"refused: {exc}", file=sys.stderr)
+        return 2
+    rows = first_questions(selected, args.questions) if args.questions else selected
+
+    llm = make_llm(TokenBudget(args.max_tokens))
+    for n, cfg in cfgs.items():
+        qs = full_context_subset(rows, args.full_context_questions) if cfg.memory == "full_context" else rows
+        embedder = make_embedder() if cfg.memory == "naive_rag" or cfg.recall == "scored_recall" else None
+        extra, aborted = {"llm_cache": CACHE_NOTE, "judge": JUDGE_NOTE.format(model=llm.model)}, None
+        try:
+            result = run_longmemeval(cfg, qs, llm, embedder=embedder, store_dir=out / n)
+        except LMEAborted as exc:
+            print(f"{n}: {exc}", file=sys.stderr)
+            result, aborted = exc.result, exc
+            extra |= {"partial": True, "completed_questions": exc.completed}
+        path = _lme_results_path(args.results_dir, n)
+        per = ", ".join(f"{sum(ability(r) == a for r in qs)} {a}" for a in ABILITIES)
+        write_result(path, eval_name="longmemeval", config=n, model=llm.model,
+                     embedding_model=embedder.name if embedder else "none",
+                     subset=f"{len(qs)} questions ({per}) from the {len(selected)} selected", seed=LME_SEED,
+                     tokens=result["tokens"], metrics=_lme_table(result), extra=extra,
+                     run_date=date.today().isoformat())
+        print(f"{n}: wrote {path}")
+        if aborted is not None:
+            return 1
+    return 0
+
+
 def _run(args, parser) -> int:
     names = [n.strip() for n in args.configs.split(",") if n.strip()]
     available = sorted(p.stem for p in CONFIGS.glob("*.toml"))
+    if args.eval == "longmemeval":
+        available = [n for n in available if n.startswith("lme_")]
     unknown = [n for n in names if n not in available]
     if unknown or not names:
         parser.error(f"unknown config(s): {', '.join(unknown) or '(none given)'}; available: {', '.join(available)}")
 
-    est = estimate(args.eval, names)
+    est = estimate(args.eval, names, args.questions, args.full_context_questions)
     for n, t in est.by_config.items():
         print(f"{n}: {t}")
     print(f"total: {est.total} (prompt {est.prompt}, completion {est.completion})")
@@ -122,8 +202,7 @@ def _run(args, parser) -> int:
         print(f"refused: {exc}", file=sys.stderr)
         return 2
     if args.eval == "longmemeval":
-        print("longmemeval runs are not implemented until T25/T26", file=sys.stderr)
-        return 2
+        return _run_lme(args, names, est)
     if est.needs_subset:
         print(f"refused: estimate above {SUBSET_THRESHOLD:,}, run a subset first", file=sys.stderr)
         return 2
@@ -173,7 +252,18 @@ def main(argv: list[str] | None = None) -> int:
         f"required with --no-estimate-only: the run's total token cap. Each config also gets its own cap of "
         f"min({PER_CONFIG_CAP:,}, what is left of the total). A config that hits its cap writes a PARTIAL result "
         f"and the run goes on with the next config; the run stops once the total is spent or a config "
-        f"crashes for any other reason. Any partial result makes the exit code 1."))
+        f"crashes for any other reason. Any partial result makes the exit code 1. On longmemeval the cap is one "
+        f"budget shared by all configs, and the first config that hits it writes a PARTIAL result and ends the run."))
+    run.add_argument("--questions", type=int, help=(
+        "longmemeval: run only the first N selected questions, stratified evenly over the abilities "
+        "(e.g. 8 for the subset run under 1,000,000 tokens)"))
+    run.add_argument("--full-context-questions", type=int, default=10,
+                     help="longmemeval: questions for lme_baseline_full_context (default 10)")
+    run.add_argument("--download", action="store_true",
+                     help="longmemeval: download the dataset into .cache/ if it is missing (the only network fetch)")
+    run.add_argument("--confirm-full", action="store_true", help=(
+        "longmemeval: allow a run whose estimate is above 5,000,000. Global rule: run a subset under "
+        "1,000,000 first (--questions), then ask the user before the full set"))
     run.add_argument("--overwrite", action="store_true", help="replace existing results files")
     run.add_argument("--out", type=Path, help="where the per-config stores go (default: a temp dir)")
     run.add_argument("--results-dir", type=Path, default=Path("results"))

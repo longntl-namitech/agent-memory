@@ -1,0 +1,13 @@
+name = "lme_full"
+
+[write]
+stage = "write_filter"
+
+[sort]
+stage = "coala_stores"
+
+[recall]
+stage = "scored_recall"
+
+[forget]
+stages = ["overwrite"]

@@ -38,7 +38,8 @@ class ToyEmbedder:
 
 
 def test_simulation_config_count_is_14():
-    assert sorted(p.stem for p in cli.CONFIGS.glob("*.toml")) == sorted(ALL)
+    sim = [p.stem for p in cli.CONFIGS.glob("*.toml") if not p.stem.startswith("lme_")]
+    assert sorted(sim) == sorted(ALL)
 
 
 def test_every_config_validates(tmp_path):
@@ -103,12 +104,10 @@ def test_max_tokens_below_estimate_refused_before_llm(monkeypatch, capsys):
     assert "exceeds max_tokens" in capsys.readouterr().err
 
 
-def test_longmemeval_not_implemented_but_estimates(monkeypatch, capsys):
+def test_longmemeval_estimates_without_llm(monkeypatch, capsys):
     monkeypatch.setattr(cli, "make_llm", no_llm)
-    assert cli.main(["run", "--eval", "longmemeval", "--configs", "full"]) == 0
+    assert cli.main(["run", "--eval", "longmemeval", "--configs", "lme_full"]) == 0
     assert "total: 5750000" in capsys.readouterr().out
-    assert cli.main(["run", "--eval", "longmemeval", "--configs", "full", "--no-estimate-only"]) == 2
-    assert "not implemented" in capsys.readouterr().err
 
 
 def test_run_writes_result_with_stub_llm(monkeypatch, tmp_path):
