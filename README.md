@@ -21,7 +21,9 @@ Each technique from the tweet "Memory Engineering: How to Build an Agent That Ge
 
 ## Pipeline
 
-<p align="center"><img src="docs/diagrams/pipeline.svg" alt="Events go through write, sort, recall, reflect and forget, and reflexion; the store holds RULES, FACTS and LOG" width="100%"></p>
+<p align="center"><img src="docs/diagrams/pipeline.svg" alt="The six stage kinds, in the tweet's order: write, sort, recall, reflect, forget, reflexion (drawn as five boxes: reflect and forget share one). In a run, each task does recall, answer, an optional reflexion retry, then write and forget; reflect runs on Fridays. The store holds RULES, FACTS and LOG." width="100%"></p>
+
+The six stage kinds, in the tweet's order: write, sort, recall, reflect, forget, reflexion (drawn as five boxes: reflect and forget share one). In a run, each task does recall, answer, an optional reflexion retry, then write and forget; reflect runs on Fridays. The diagram shows stage kinds, not run order.
 
 Every stage-based memory uses the same store: RULES (always loaded, 20 lines at most), FACTS (one entry per key, newest wins) and LOG (dated events, searched only when needed). Every stage gets `now` from outside; nothing in `core/` or `methods/` reads system time.
 
@@ -132,7 +134,7 @@ For LongMemEval the full set is above 5,000,000 tokens. The rule is to run a sub
 ## Caveats
 
 - The tweet's numbers (91% HumanEval for Reflexion, 39% and 84% for Anthropic's memory tool and context editing, corrections per week 14, 9, 4, 1) are the author's claims. They are NOT verified and are not reproduced here.
-- `archive` cannot fire in the 28-day simulation, given the always-rendering recall stages.
+- `archive` cannot fire in the 28-day simulation, because a rule cannot be 30 days old in a 28-day run (`last_used_at` starts at creation) and the recall stages always render rules.
 - `overwrite` is close to a no-op after `write_filter`: facts are already collapsed at write time by `upsert_fact`.
 - Under `expire`, the `reflect` stage effectively has a 7-day window. Under `write_raw`, corrections expire after 7 days while `write_filter` turns them into rules, so part of any `no_write_filter` gap under `expire` is this artifact.
 - Reflexion is told the failed check and the rule wording, so the check acts as an oracle, stronger than a real deployment.
