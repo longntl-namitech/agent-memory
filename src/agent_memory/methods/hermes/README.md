@@ -80,24 +80,26 @@ by the pilot (it runs one config for a few tasks); it needs the real runs.
 
 ## Verified and unverified
 
-Verified by the first real calls (see `docs/hermes-flags.md`): the key via `key_env` authenticates with a dedicated
-data root (`key_env` defaults to `OPENAI_API_KEY`, `base_url` to `$OPENAI_BASE_URL`); the usage file shape; exit 2
-with `null` token fields on a missing key; `-t` and `--provider custom` are accepted.
+Verified by the real calls and pilots (see `docs/hermes-flags.md`): the key via the process environment
+(`key_env`, default `OPENAI_API_KEY`; `base_url` defaults to `$OPENAI_BASE_URL`) works with a dedicated data root;
+a failed call (exit 2, missing key) writes a usage file with `null` token fields; `-t memory,file,todo` and
+`-t memory,todo` are accepted; `--provider custom` is accepted; the real usage JSON shape; wipe-then-reuse of a
+data root, once, without a re-bootstrap; `gateway stop` leaves no Hermes process behind; no key on disk.
 
-Measured by the first real pilot (3 tasks of `hermes_default`, run with `-t memory,file,todo` before `file` was
-dropped): 4,824 / 4,846 / 4,861 tokens, mean 4,844 per task; extrapolated 193,747 per 40-task run, 1,162,482 for 6
-runs, 387,494 for 1 run per config. These are lower bounds (no corrections, no planted rule, empty MEMORY.md), far
-above the 100,000 per-config default: `run` refuses a Hermes config without an explicit `--per-config-cap` (the
-spec allows raising it for Hermes only).
+Measured on 2026-11-17 by the second real pilot (3 tasks of `hermes_default`, toolsets `memory,todo`): 3,715 /
+3,719 / 3,758 tokens per task (mean 3,731), 0 failed attempts; extrapolated 149,227 per 40-task run, 895,362 for 6
+runs (2 configs x 3), 298,454 for 1 run per config. The recommended per-config cap for a Hermes run is at least
+about 150,000 plus headroom for growth: the figure is a downward-biased lower bound (no corrections, no planted
+rule, empty MEMORY.md). `run` refuses a Hermes config without an explicit `--per-config-cap` (the spec allows
+raising it for Hermes only).
 
 Still unverified:
 
-- Wipe-then-reuse of a data root without a re-bootstrap (wiping `logs/`, `sessions/`, `state.db` and the rest):
-  only one real run exists so far.
-- What Hermes does with a MEMORY.md above its 2,200-character cap.
 - The real exit codes 1 (empty reply) and 130 (interrupt), and the code for a turn-cap stop.
-- A memory write (`add`, `patch`) made by the model in a real run.
-- The 3-runs spread (the pilot does not produce it).
+- A memory write (`add`, `patch`) made by the model in a real run (the pilot tasks wrote none that we checked).
+- What Hermes does with a MEMORY.md above its 2,200-character cap.
+- Recovery from a partial bootstrap.
+- The 3-run spread (the pilot does not produce it).
 - That stdout of `hermes -z` is the email text only.
 - That `memory_enabled: false` removes the memory tool and block, and that `-t` leaves no terminal or file
   access.

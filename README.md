@@ -96,7 +96,7 @@ Each method has its own README with constants, behavior and an example.
 
 Defaults used when a config leaves a part out: [`write_raw`](src/agent_memory/methods/write_raw/README.md) (write), [`pool_route`](src/agent_memory/methods/pool_route/README.md) (sort) and [`rules_only`](src/agent_memory/methods/rules_only/README.md) (recall).
 
-The Hermes Agent baseline is designed in the spec but not built yet (see [Caveats](#caveats)).
+The Hermes Agent baseline is built (see its [README](src/agent_memory/methods/hermes/README.md) and [Caveats](#caveats)).
 
 ## Configs
 
@@ -150,7 +150,7 @@ For LongMemEval the full set is above 5,000,000 tokens. The rule is to run a sub
 - For configs with `reflexion`, the results say that corrections are counted after an oracle-guided retry. Compare memory methods on `first_attempt_failures`.
 - The LLM cache key is (model, messages), without the endpoint. Changing `OPENAI_BASE_URL` while keeping the same model name replays cached replies.
 - Embedding calls are not counted against the token budgets. With no `EMBEDDING_*` env set, the fastembed model is downloaded from Hugging Face on first use, outside the `--download` gate.
-- The Hermes Agent baseline (`hermes_default`, `hermes_no_memory`, simulation only) is designed in the spec but not built or measured. When it is, its rows will be marked "not cache-reproducible", because Hermes calls the model itself and reads real time.
+- The Hermes Agent baseline (`hermes_default`, `hermes_no_memory`, simulation only) is built but has no full-run results yet. Its rows are marked "not cache-reproducible", because Hermes calls the model itself and reads real time. Measured on 2026-11-17 by the second real pilot (3 tasks of `hermes_default`, toolsets `memory,todo`): 3,715 / 3,719 / 3,758 tokens per task (mean 3,731), 0 failed attempts; extrapolated 149,227 per 40-task run, 895,362 for 6 runs (2 configs x 3), 298,454 for 1 run per config. The recommended per-config cap for a Hermes run is at least about 150,000 plus headroom for growth: the figure is a downward-biased lower bound (no corrections, no planted rule, empty MEMORY.md). `run` needs an explicit `--per-config-cap` for a Hermes config.
 
 ## Data and attribution
 

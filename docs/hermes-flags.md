@@ -36,16 +36,20 @@ never printed or written) changed the adapter design. Facts:
    key `install_home`), and a failing `--version` gives `unknown (hermes --version exited N)` instead of stopping
    the run. The only other call outside `-z` is `gateway stop`, whose failure is ignored.
 
-Measured by the first real pilot (3 tasks of `hermes_default`, `-t memory,file,todo`, before `file` was dropped):
-4,824 / 4,846 / 4,861 tokens, mean 4,844 per task; extrapolated 193,747 per 40-task run, 1,162,482 for 6 runs,
-387,494 for 1 run per config, all lower bounds. (The 6,301 of fact 2 was a single trivial call with `skills`
-still in `-t`.)
+Measured on 2026-11-17 by the second real pilot (3 tasks of `hermes_default`, toolsets `memory,todo`): 3,715 /
+3,719 / 3,758 tokens per task (mean 3,731), 0 failed attempts; extrapolated 149,227 per 40-task run, 895,362 for 6
+runs (2 configs x 3), 298,454 for 1 run per config. These replace the first pilot's figures, measured with the
+`file` toolset. (The 6,301 of fact 2 was a single trivial call with `skills` still in `-t`.) The recommended per-
+config cap for a Hermes run is at least about 150,000 plus headroom for growth: the figure is a downward-biased
+lower bound (no corrections, no planted rule, empty MEMORY.md).
 
-Verified by these calls: the real usage JSON shape; exit 2 with null usage on a missing key; the key via the
-environment works with a dedicated data root; `-t` accepted; `--provider custom` accepted. Still UNVERIFIED: exit
-codes 1 and 130 in practice, `memory_enabled: false` removing the memory tool, a `memory` tool write by the model,
-wipe-then-reuse of a data root without a re-bootstrap, behaviour above the 2,200-character MEMORY.md cap, and the
-3-runs spread (the pilot does not produce it).
+Verified by the real calls and pilots: the key via the process environment works with a dedicated data root; a
+failed call (exit 2, missing key) writes a usage file with null token fields; `-t memory,file,todo` and `-t
+memory,todo` are accepted; `--provider custom` is accepted; the real usage JSON shape; wipe-then-reuse of a data
+root, once, without a re-bootstrap; `gateway stop` leaves no Hermes process behind; no key on disk. STILL
+UNVERIFIED: exit codes 1 and 130 in practice, memory-off removing the memory tool, a model-made memory write (the
+pilot tasks wrote none that we checked), behaviour above the 2,200-character MEMORY.md cap, recovery from a partial
+bootstrap, the 3-run spread.
 
 The adapter now uses one dedicated data root per config (`.hermes-lab/<config>`), no `-p`, no
 `hermes profile create/delete`. The run state it wipes at start and at close, as paths under `$HERMES_HOME`, each
@@ -205,12 +209,14 @@ accounting use `total_including_auxiliary.total_tokens`, because auxiliary calls
   a named profile).
 - VERIFIED (first real calls): the usage file is written by `hermes -z` and has the keys above, including on a
   failed call (token fields `null`).
+- VERIFIED (second real pilot): wipe-then-reuse of the same data root, once, without a re-bootstrap; no Hermes
+  process left after `gateway stop`; no key on disk.
 - Real exit codes for a budget stop (`agent.max_turns`) and for an empty reply (1), and for an interrupt (130).
 - `memory_enabled: false` really removes the `memory` tool and the MEMORY.md block from the system prompt
   (code reads the flag at `memory_tool.py:305-309`; not exercised).
 - `-t memory,todo` leaves no terminal or file access (the flag is accepted; toolset contents read, not run).
 - A `memory` tool write (`add`, `patch`) made by the model in a real run.
-- Wipe-then-reuse of a data root without a re-bootstrap (only one real run exists).
+- Recovery from a partial bootstrap.
 - What Hermes does with a MEMORY.md above its 2,200-character cap.
 - The 3-runs spread (the pilot does not produce it).
 - The `hermes pm repair` notice blocks `--version` in a fresh data root (finding 5), not `-z`.

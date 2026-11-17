@@ -287,7 +287,7 @@ def test_hermes_run_needs_an_explicit_per_config_cap(monkeypatch, tmp_path, caps
     monkeypatch.setattr(cli, "make_llm", no_llm)
     assert cli.main(run_args(tmp_path, "hermes_default", "--max-tokens", "500000")) == 2
     err = capsys.readouterr().err
-    assert "--per-config-cap" in err and "100,000" in err and "194,000" in err and "Hermes only" in err
+    assert "--per-config-cap" in err and "100,000" in err and "per-run figure from the pilot" in err and "Hermes only" in err
     assert not (tmp_path / "calls.log").exists() and not home.exists()
     assert not (tmp_path / "results").exists() and not (tmp_path / "stores").exists()
 

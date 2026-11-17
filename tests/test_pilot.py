@@ -63,7 +63,7 @@ def test_run_prints_table_and_extrapolation(monkeypatch, tmp_path, capsys):
     assert "- hermes_version: 0.23.2" in text and "- mean_tokens_per_task: 1000" in text
     assert "- reproducibility: not cache-reproducible" in text and "- tokens: 3000" in text
     assert "one two three" not in text
-    for needle in ("biased downward", "hermes_no_memory", "overshoot it", "4,844 tokens", "194,000"):
+    for needle in ("biased downward", "hermes_no_memory", "overshoot it", "fixed overhead", "above the 100,000 per-config default"):
         assert needle in out and needle in text
     assert no_run_state(home)
 

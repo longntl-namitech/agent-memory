@@ -18,7 +18,8 @@
 - `write_filter` skips a correction text it has already handled and counts rules dropped at the 20-rule cap.
 - Results show `extra_from_wrong_rule` as `n/a` for whole-memory baselines and note that `reflexion` corrections come after an oracle-guided retry.
 - `agent-memory pilot`: runs the first N tasks on a Hermes config (dry run unless `--run --max-tokens N`) and extrapolates tokens to 40 tasks x 6 runs.
-- Hermes Agent baseline: adapter and two configs (`hermes_default`, `hermes_no_memory`).
+- Hermes Agent baseline: adapter and two configs (`hermes_default`, `hermes_no_memory`), each with its own reused Hermes data root.
+- Hermes pilot numbers: measured on 2026-11-17 by the second real pilot (3 tasks of `hermes_default`, toolsets `memory,todo`): 3,715 / 3,719 / 3,758 tokens per task (mean 3,731), 0 failed attempts; extrapolated 149,227 per 40-task run, 895,362 for 6 runs (2 configs x 3), 298,454 for 1 run per config. The recommended per-config cap for a Hermes run is at least about 150,000 plus headroom for growth: the figure is a downward-biased lower bound (no corrections, no planted rule, empty MEMORY.md).
 - LongMemEval subset-first rule enforced: above 5,000,000 for the full set, a run above 1,000,000 needs `--confirm-full`.
 
 ### Not yet

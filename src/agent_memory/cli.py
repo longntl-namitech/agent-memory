@@ -231,9 +231,10 @@ PILOT_CAVEATS = [
     "(memory off has a shorter prompt), so it is a rough planning number: run the pilot for hermes_no_memory too "
     "if it matters",
     "the token cap is checked after each task, so one task can overshoot it",
-    "the first real pilot (3 tasks, -t memory,file,todo) measured 4,824 / 4,846 / 4,861 tokens, mean 4,844 tokens "
-    "per task, so a 40-task run is about 194,000 (193,747), a lower bound, far above the 100,000 per-config "
-    "default; the spec allows raising the cap for Hermes only, `run` needs an explicit `--per-config-cap`",
+    "each Hermes call carries a fixed overhead (its system prompt and tools) even for a short task, measured in the "
+    "real pilot (numbers in results/pilot_<config>.md and docs/hermes-flags.md), so a 40-task run needs a cap above "
+    "the 100,000 per-config default; the spec allows raising the cap for Hermes only, `run` needs an explicit "
+    "`--per-config-cap`",
 ]
 
 
@@ -388,9 +389,9 @@ def _run(args, parser) -> int:
     hermes = [n for n in names if load_config(CONFIGS / f"{n}.toml").agent == "hermes"]
     if hermes and not explicit_cap:
         print(f"refused: {', '.join(hermes)} needs an explicit --per-config-cap. The default {PER_CONFIG_CAP:,} "
-              "stops a Hermes run at about half its tasks; use at least the pilot's per-run figure (about 194,000 "
-              "measured, a downward-biased lower bound) plus headroom. The spec allows raising the cap for Hermes "
-              "only.", file=sys.stderr)
+              "stops a Hermes run before its 40 tasks are done; use at least the per-run figure from the pilot "
+              "(results/pilot_<config>.md, a downward-biased lower bound) plus headroom. The spec allows raising "
+              "the cap for Hermes only.", file=sys.stderr)
         return 2
     out = args.out or Path(tempfile.mkdtemp(prefix="agent-memory-"))
     for n in names:
