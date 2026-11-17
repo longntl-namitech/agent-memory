@@ -123,3 +123,13 @@ def test_touch_sets_last_used_and_persists(tmp_path):
     s.touch(["a"], later)
     got = {e.id: e.last_used_at for e in Store(tmp_path).facts()}
     assert got == {"a": later, "b": T}
+
+
+def test_replace_fact_updates_in_place_and_persists(tmp_path):
+    s = Store(tmp_path)
+    t0, t1 = datetime(2026, 1, 1), datetime(2026, 1, 2)
+    s.add(Entry("a", "fact", "k", ["x"], "old", 3, t0, t0, None, "active"))
+    s.replace_fact("a", "new", ["y"], 7, t1, t1)
+    e = Store(tmp_path).facts()[0]
+    assert (e.id, e.created_at, e.text, e.tags, e.importance, e.expires_at, e.last_used_at) == (
+        "a", t0, "new", ["y"], 7, t1, t1)

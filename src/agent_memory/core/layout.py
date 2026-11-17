@@ -91,6 +91,14 @@ class Store:
                 return
         self.add(e)
 
+    def replace_fact(self, id: str, text: str, tags: list[str], importance: int,
+                     expires_at: datetime | None, now: datetime) -> None:
+        """Rewrite an active fact's content in place; id and created_at stay."""
+        for e in self._active("fact"):
+            if e.id == id:
+                e.text, e.tags, e.importance, e.expires_at, e.last_used_at = text, list(tags), importance, expires_at, now
+        self._save()
+
     def rules(self) -> list[Entry]:
         return self._active("rule")
 
