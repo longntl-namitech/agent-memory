@@ -138,11 +138,11 @@ def test_session_timestamps_drive_clock(tmp_path, monkeypatch):
                                           datetime(2023, 5, 3, 12)]
     assert [e.text for e, _ in writes] == ["user: q1 session 1\nassistant: ok", "user: q1 session 2\nassistant: ok",
                                            "user: q1 session 0\nassistant: ok"]
-    assert all(e.kind == "session" and e.tags == [] and e.source == "longmemeval" for e, _ in writes)
+    assert all(e.kind == "session" and e.tags == ["global"] and e.source == "longmemeval" for e, _ in writes)
     recall = [x for x in RecMemory.log if x[0] == "recall"]
     assert len(recall) == 1 and recall[0][2] == datetime(2023, 5, 30, 10)
     task = recall[0][1]
-    assert task.lead == {"question": "What pet?"} and task.tags == [] and task.wants_log is True
+    assert task.lead == {"question": "What pet?"} and task.tags == ["global"] and task.wants_log is True
     assert clock.now() == datetime(2023, 5, 30, 10)
     assert not [x for x in RecMemory.log if x[0] in ("reflect", "forget")]
 
@@ -177,6 +177,21 @@ def test_cadence_stages_do_not_run(tmp_path, monkeypatch):
     res = run_longmemeval(Config(name="ok", write="write_filter", forget=["overwrite"]), [row()],
                           counting_llm(tmp_path), store_dir=tmp_path / "ok")
     assert res["total"] == 1 and calls == []
+
+
+def test_fact_recalled_through_coala_stores(tmp_path):
+    answers = []
+
+    def transport(model, messages):
+        if messages[-1]["content"].startswith("Current date:"):
+            answers.append(messages[0]["content"])
+        return reply_for(messages), 10, 5
+
+    llm = LLMClient("stub", "stub-model", TokenBudget(None), tmp_path / "llm", transport=transport)
+    cfg = load_config(cli.CONFIGS / "lme_b3_scored_recall.toml")
+    assert cfg.write == "write_filter" and cfg.sort == "coala_stores"
+    run_longmemeval(cfg, [row()], llm, embedder=ToyEmbedder(), store_dir=tmp_path / "s")
+    assert len(answers) == 1 and "the user has a dog" in answers[0]
 
 
 def test_hermes_not_allowed_here(tmp_path):
@@ -295,7 +310,16 @@ def test_cli_lme_estimate_with_questions(monkeypatch, capsys):
     monkeypatch.setattr(cli, "make_llm", no_llm)
     assert cli.main(["run", "--eval", "longmemeval", "--configs", "lme_full", "--questions", "8"]) == 0
     out = capsys.readouterr().out
-    assert "total: 920000" in out and "estimate only" in out
+    assert "total: 967200" in out and "estimate only" in out
+    assert "approximation" in out and "UNVERIFIED" in out
+
+
+@pytest.mark.parametrize("n", ["0", "-1"])
+def test_cli_questions_must_be_positive(monkeypatch, capsys, n):
+    monkeypatch.setattr(cli, "make_llm", no_llm)
+    with pytest.raises(SystemExit) as exc:
+        cli.main(["run", "--eval", "longmemeval", "--configs", "lme_full", "--questions", n])
+    assert exc.value.code == 2 and "--questions" in capsys.readouterr().err
 
 
 def test_cli_lme_refuses_full_set_without_confirm(monkeypatch, tmp_path, capsys):

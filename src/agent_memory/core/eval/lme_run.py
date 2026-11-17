@@ -18,6 +18,7 @@ from agent_memory.core.llm import LLMClient
 from agent_memory.core.memory import Event, Task
 from agent_memory.core.registry import ConfigError
 
+_TAGS = ["global"]  # LongMemEval has no company slugs; `global` lets coala_stores route the facts
 _ANSWER = ("You answer questions about past conversations with the user, using only the memory below. "
            "If the memory does not contain the answer, say that the information is not available.\n\n"
            "Memory:\n{memory}")
@@ -95,11 +96,11 @@ def _question(config, row, llm, deps, overwrite, clock, store_dir) -> bool:
     sessions = sorted(zip(map(parse_date, row["haystack_dates"]), row["haystack_sessions"]), key=lambda s: s[0])
     for dt, session in sessions:
         now = _tick(clock, dt)
-        memory.write(Event("session", _render(session), [], "longmemeval"), now)
+        memory.write(Event("session", _render(session), list(_TAGS), "longmemeval"), now)
         if overwrite:
             memory.forget(now)  # check_lme_config allows only overwrite in the forget list
     now = _tick(clock, parse_date(row["question_date"]))
-    task = Task(id=0, week=0, day=0, lead={"question": row["question"]}, tags=[], wants_log=True)
+    task = Task(id=0, week=0, day=0, lead={"question": row["question"]}, tags=list(_TAGS), wants_log=True)
     context = memory.recall(task, now)
     answer = llm.chat([{"role": "system", "content": _ANSWER.format(memory=context)},
                        {"role": "user", "content": f"Current date: {row['question_date']}\n"

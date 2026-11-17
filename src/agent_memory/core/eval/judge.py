@@ -1,8 +1,11 @@
 """LongMemEval answer judge: one yes/no LLM call.
 
-Prompts follow the LongMemEval judging recipe (`evaluate_qa.py`, per question type), reproduced from memory of
-the original repo and not checked against it, so the wording may differ. The official judge is GPT-4o; ours
-runs on the shared client's model (gpt-5.4-nano), so scores are NOT comparable with the official leaderboard.
+Prompts are copied from LongMemEval's `src/evaluation/evaluate_qa.py` (per question type); a review checked
+them verbatim against the original, apart from a cosmetic trailing space. Differences from the original:
+- parsing: the original counts `'yes' in reply.lower()`; ours needs the first token to be `yes`.
+- the original calls the judge with temperature=0 and max_tokens=10; LLMClient.chat cannot set either.
+- model: the official judge is GPT-4o; ours runs on the shared client's model (gpt-5.4-nano), so scores are NOT
+  comparable with the official leaderboard.
 """
 
 from agent_memory.core.llm import LLMClient

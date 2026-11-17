@@ -127,3 +127,13 @@ class HashEmbedder:
 
     def embed(self, texts):
         return np.array([[len(w) + 1 for w in (t.split() + ["x"] * 3)[:3]] for t in texts], dtype=float)
+
+
+def test_naive_rag_query_from_lead_keys_or_all_strings(tmp_path):
+    emb = FakeEmbedder()
+    mem = NaiveRag(Store(tmp_path), embedder=emb)
+    mem.write(ev("alpha 1"), NOW)
+    mem.recall(TASK, NOW)
+    assert emb.calls[-1] == ["Ann Acme alpha"]  # simulation path unchanged
+    mem.recall(Task(2, 0, 0, {"question": "alpha pet?", "n": 3}, [], True), NOW)
+    assert emb.calls[-1] == ["alpha pet?"]  # no name/company/product: all string values of the lead

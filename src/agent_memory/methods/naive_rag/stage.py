@@ -35,7 +35,11 @@ class NaiveRag(Memory):
     def recall(self, task: Task, now: datetime) -> str:
         if not self._vecs:
             return ""
-        query = " ".join(str(task.lead.get(k, "")) for k in ("name", "company", "product"))
+        keys = ("name", "company", "product")
+        if any(k in task.lead for k in keys):
+            query = " ".join(str(task.lead.get(k, "")) for k in keys)  # simulation leads
+        else:  # e.g. LongMemEval: lead {"question": ...}
+            query = " ".join(v for v in task.lead.values() if isinstance(v, str))
         # over-fetch (all hits), then keep the first TOP_K that are still active in the store
         hits = cosine_index(np.array(self._vecs))(self.embedder.embed([query])[0], len(self._vecs))
         active = {e.id for e in self.store.log()}

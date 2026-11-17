@@ -11,7 +11,7 @@ from pathlib import Path
 from agent_memory.core.clock import SimClock
 from agent_memory.core.config import build, load_config
 from agent_memory.core.eval.checks import check
-from agent_memory.core.eval.estimate import SUBSET_THRESHOLD, EstimateOnly, estimate, gate
+from agent_memory.core.eval.estimate import LME_NOTE, SUBSET_THRESHOLD, EstimateOnly, estimate, gate
 from agent_memory.core.eval.lme_run import LMEAborted, check_lme_config, run_longmemeval
 from agent_memory.core.eval.longmemeval import (ABILITIES, ability, download, first_questions,
                                                 full_context_subset, load_selected)
@@ -32,7 +32,7 @@ LME_CACHE = Path(".cache")
 LME_PER_ABILITY = 10
 LME_SEED = 7
 SUBSET_LIMIT = 1_000_000  # global rule: above 5M, first run a subset under 1M, then ask before the full set
-JUDGE_NOTE = "{model} LLM judge (LongMemEval-style prompts), not comparable with the official GPT-4o judge"
+JUDGE_NOTE = "{model} LLM judge (LongMemEval prompts), not comparable with the official GPT-4o judge"
 
 
 def make_llm(budget: TokenBudget) -> LLMClient:
@@ -177,6 +177,13 @@ def _run_lme(args, names: list[str], est) -> int:
     return 0
 
 
+def _positive(text: str) -> int:
+    n = int(text)
+    if n < 1:
+        raise argparse.ArgumentTypeError(f"must be >= 1, got {n}")
+    return n
+
+
 def _run(args, parser) -> int:
     names = [n.strip() for n in args.configs.split(",") if n.strip()]
     available = sorted(p.stem for p in CONFIGS.glob("*.toml"))
@@ -186,13 +193,18 @@ def _run(args, parser) -> int:
     if unknown or not names:
         parser.error(f"unknown config(s): {', '.join(unknown) or '(none given)'}; available: {', '.join(available)}")
 
-    est = estimate(args.eval, names, args.questions, args.full_context_questions)
+    stages = None
+    if args.eval == "longmemeval":
+        stages = {n: c.memory or c.write for n, c in ((n, load_config(CONFIGS / f"{n}.toml")) for n in names)}
+    est = estimate(args.eval, names, args.questions, args.full_context_questions, stages)
     for n, t in est.by_config.items():
         print(f"{n}: {t}")
-    print(f"total: {est.total} (prompt {est.prompt}, completion {est.completion})")
+    print(f"total: {est.total} (prompt {est.prompt}, completion {est.completion}, overhead {est.overhead})")
     print(f"above {SUBSET_THRESHOLD:,}: {'yes' if est.needs_subset else 'no'}")
     if args.eval == "simulation":
         print("note: the simulation per-task numbers are a placeholder (2,000 prompt + 500 completion per task)")
+    else:
+        print(LME_NOTE)
     try:
         gate(est, args.max_tokens, args.estimate_only)
     except EstimateOnly:
@@ -254,7 +266,7 @@ def main(argv: list[str] | None = None) -> int:
         f"and the run goes on with the next config; the run stops once the total is spent or a config "
         f"crashes for any other reason. Any partial result makes the exit code 1. On longmemeval the cap is one "
         f"budget shared by all configs, and the first config that hits it writes a PARTIAL result and ends the run."))
-    run.add_argument("--questions", type=int, help=(
+    run.add_argument("--questions", type=_positive, help=(
         "longmemeval: run only the first N selected questions, stratified evenly over the abilities "
         "(e.g. 8 for the subset run under 1,000,000 tokens)"))
     run.add_argument("--full-context-questions", type=int, default=10,

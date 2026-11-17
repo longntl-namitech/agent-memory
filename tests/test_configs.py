@@ -107,7 +107,7 @@ def test_max_tokens_below_estimate_refused_before_llm(monkeypatch, capsys):
 def test_longmemeval_estimates_without_llm(monkeypatch, capsys):
     monkeypatch.setattr(cli, "make_llm", no_llm)
     assert cli.main(["run", "--eval", "longmemeval", "--configs", "lme_full"]) == 0
-    assert "total: 5750000" in capsys.readouterr().out
+    assert "(prompt 5750000," in capsys.readouterr().out
 
 
 def test_run_writes_result_with_stub_llm(monkeypatch, tmp_path):
