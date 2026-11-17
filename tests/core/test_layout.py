@@ -115,6 +115,15 @@ def test_all_log_includes_archived(tmp_path):
     assert [e.id for e in s.log()] == ["l2"]
 
 
+def test_all_facts_includes_archived(tmp_path):
+    s = Store(tmp_path)
+    s.upsert_fact(mk("f1", key="a"))
+    s.upsert_fact(mk("f2", key="b"))
+    s.archive("f1", T)
+    assert [e.id for e in s.all_facts()] == ["f1", "f2"]
+    assert [e.id for e in s.facts()] == ["f2"]
+
+
 def test_touch_sets_last_used_and_persists(tmp_path):
     s = Store(tmp_path)
     s.add(mk("a", key="k"))

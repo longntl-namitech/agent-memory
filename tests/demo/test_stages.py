@@ -82,6 +82,33 @@ def test_same_key_overwrites_in_place(tmp_path, stages):
     assert "city" in llm.prompts[0]  # existing keys are shown to the model
 
 
+def test_overwrite_returns_stored_fact(tmp_path, stages):
+    store, w = Store(tmp_path), stages.AssistantWrite()
+    (old,) = w.write(ev(), store, NOW, StubLLM(reply({"kind": "fact", "key": "city", "text": "Hanoi"})))
+    (new,) = w.write(ev(), store, NOW, StubLLM(reply({"kind": "fact", "key": "city", "text": "Da Nang"})))
+    assert new.id == old.id and new.text == "Da Nang" and new is store.facts()[0]
+
+
+def test_fact_ids_unique_after_forget_and_rewrite(tmp_path, stages):
+    store, w = Store(tmp_path), stages.AssistantWrite()
+    city = lambda t: StubLLM(reply({"kind": "fact", "key": "city", "text": t}))
+    (old,) = w.write(ev(), store, NOW, city("Hanoi"))
+    store.archive(old.id, NOW)
+    (new,) = w.write(ev(), store, NOW, city("Da Nang"))
+    ids = [f.id for f in store.all_facts()]
+    assert len(ids) == len(set(ids)) == 2
+    store.archive(new.id, datetime(2026, 2, 1))
+    assert store.all_facts()[0].archived_at == NOW
+
+
+def test_malformed_entries_counted(tmp_path, stages):
+    store, w = Store(tmp_path), stages.AssistantWrite()
+    llm = StubLLM(json.dumps({"entries": [{"kind": "wish", "text": "x"}, {"kind": "log", "text": ""}, "junk",
+                                          {"kind": "log", "text": "ok"}]}))
+    out = w.write(ev(), store, NOW, llm)
+    assert [e.text for e in out] == ["ok"] and w.skipped_entries == 3 and w.fallbacks == 0
+
+
 def test_invalid_json_falls_back_to_log(tmp_path, stages):
     store, w = Store(tmp_path), stages.AssistantWrite()
     out = w.write(ev("raw text"), store, NOW, StubLLM("not json at all"))
