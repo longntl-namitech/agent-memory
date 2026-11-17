@@ -104,3 +104,12 @@ def test_facts_filter_by_tag(tmp_path):
     s.upsert_fact(mk("b", key="k2", tags=["y"]))
     assert [e.id for e in s.facts("x")] == ["a"]
     assert len(s.facts()) == 2
+
+
+def test_all_log_includes_archived(tmp_path):
+    s = Store(tmp_path)
+    s.add(mk("l1", kind="log"))
+    s.add(mk("l2", kind="log"))
+    s.archive("l1", T)
+    assert [e.id for e in s.all_log()] == ["l1", "l2"]
+    assert [e.id for e in s.log()] == ["l2"]

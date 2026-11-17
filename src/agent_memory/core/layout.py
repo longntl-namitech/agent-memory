@@ -104,6 +104,10 @@ class Store:
         """Active and archived rules, for rebuilding RULES at a past time."""
         return list(self._entries["rule"])
 
+    def all_log(self) -> list[Entry]:
+        """Active and archived log lines."""
+        return list(self._entries["log"])
+
     def archive(self, id: str, now: datetime | None = None) -> None:
         for es in self._entries.values():
             for e in es:

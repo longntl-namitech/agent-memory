@@ -20,11 +20,13 @@ class NaiveRag(Memory):
         # shortcut: vectors and texts live in memory; a store preloaded with log lines is not re-embedded
         self._vecs: list[np.ndarray] = []
         self._texts: list[str] = []
-        self._n = len(store._entries["log"])  # archived lines count too, so ids never repeat
+        self._ids: list[str] = []
+        self._n = len(store.all_log())  # archived lines count too, so ids never repeat
 
     def write(self, event: Event, now: datetime) -> None:
         self._vecs.append(self.embedder.embed([event.text])[0])
         self._texts.append(event.text)
+        self._ids.append(f"log-{self._n}")
         self.store.add(Entry(id=f"log-{self._n}", kind="log", key=None, tags=event.tags,
                              text=event.text, importance=5, created_at=now, last_used_at=now,
                              expires_at=None, status="active"))
@@ -34,8 +36,10 @@ class NaiveRag(Memory):
         if not self._vecs:
             return ""
         query = " ".join(str(task.lead.get(k, "")) for k in ("name", "company", "product"))
-        hits = cosine_index(np.array(self._vecs))(self.embedder.embed([query])[0], TOP_K)
-        return "\n".join(self._texts[i] for i, _ in hits)
+        # over-fetch (all hits), then keep the first TOP_K that are still active in the store
+        hits = cosine_index(np.array(self._vecs))(self.embedder.embed([query])[0], len(self._vecs))
+        active = {e.id for e in self.store.log()}
+        return "\n".join([self._texts[i] for i, _ in hits if self._ids[i] in active][:TOP_K])
 
     def reflect(self, now: datetime) -> None:
         pass

@@ -71,13 +71,22 @@ def test_naive_rag_survives_archive_and_preload(tmp_path):
     for t in ["beta 1", "alpha 2", "gamma 3"]:
         mem.write(ev(t), NOW)
     store.archive("log-0", NOW)
-    assert mem.recall(TASK, NOW).splitlines()[0] == "alpha 2"
-    assert mem.recall(TASK, NOW).splitlines() == ["alpha 2", "beta 1", "gamma 3"]
+    assert mem.recall(TASK, NOW).splitlines() == ["alpha 2", "gamma 3"]  # archived beta 1 excluded
     mem2 = NaiveRag(Store(tmp_path), embedder=FakeEmbedder())  # preloaded store
     mem2.write(ev("near 4"), NOW)
     assert mem2.recall(TASK, NOW) == "near 4"
-    ids = [e.id for e in mem2.store._entries["log"]]
+    ids = [e.id for e in mem2.store.all_log()]
     assert len(ids) == len(set(ids))
+
+
+def test_naive_rag_returns_k_active_when_enough(tmp_path):
+    store = Store(tmp_path)
+    mem = NaiveRag(store, embedder=FakeEmbedder())
+    for t in ["alpha 1", "near 2", "beta 3", "beta 4", "gamma 5", "gamma 6", "beta 7"]:
+        mem.write(ev(t), NOW)
+    store.archive("log-0", NOW)
+    out = mem.recall(TASK, NOW).splitlines()
+    assert len(out) == 5 and out[0] == "near 2" and "alpha 1" not in out
 
 
 def test_naive_rag_k_larger_than_history_and_empty(tmp_path):
@@ -98,7 +107,7 @@ def test_full_context_ids_unique_after_archive_and_empty(tmp_path):
     assert mem.recall(TASK, NOW).splitlines() == ["b", "c"]
     mem2 = FullContext(Store(tmp_path))
     mem2.write(ev("d"), NOW)
-    ids = [e.id for e in mem2.store._entries["log"]]
+    ids = [e.id for e in mem2.store.all_log()]
     assert len(ids) == len(set(ids)) == 4
 
 
