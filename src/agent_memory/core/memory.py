@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Any, Callable, Protocol
 
 from agent_memory.core.layout import Entry, Store
-from agent_memory.core.llm import Completion, LLMClient
+from agent_memory.core.llm import LLMClient
 
 
 @dataclass
@@ -41,6 +41,8 @@ class AgentResult:
 
 
 class WriteStage(Protocol):
+    """Persists its own entries to the store; the returned list is informational only."""
+
     def write(self, event: Event, store: Store, now: datetime, llm: LLMClient) -> list[Entry]: ...
 
 
@@ -57,6 +59,8 @@ class ReflectStage(Protocol):
 
 
 class RetryStage(Protocol):
+    """The returned note goes through memory.write, so the configured write stage may drop it."""
+
     def retry(self, task: Task, first_output: str, failed_check: str, context: str, llm: LLMClient) -> RetryResult: ...
 
 
@@ -84,6 +88,7 @@ class StagedMemory:
     forgetters: list[ForgetStage]
 
     def write(self, event: Event, now: datetime) -> None:
+        # The write stage persists its entries itself; nothing is added here, so no duplicates.
         self.writer.write(event, self.store, now, self.llm)
 
     def recall(self, task: Task, now: datetime) -> str:
@@ -102,7 +107,11 @@ Check = Callable[[Task, str], str | None]  # returns the failed check's name, or
 
 
 class MemoryAgent(Agent):
-    """Recall, answer, and on a failed check run each retry stage once. The full loop lands in T9."""
+    """Recall, answer, and on a failed check run each retry stage once. The full loop lands in T9.
+
+    Retry notes go through memory.write, so the configured write stage handles them (a filter may drop them).
+    `tokens` is the budget.used delta over the whole task, so cache hits cost 0 and memory-internal calls count.
+    """
 
     def __init__(self, memory: Memory, llm: LLMClient, retries: list[RetryStage] = (), check: Check | None = None):
         self.memory = memory
@@ -111,33 +120,21 @@ class MemoryAgent(Agent):
         self.check = check
 
     def run_task(self, task: Task, now: datetime) -> AgentResult:
+        before = self.llm.budget.used
         context = self.memory.recall(task, now)
         messages = [
             {"role": "system", "content": context},
             {"role": "user", "content": json.dumps({"lead": task.lead, "tags": task.tags}, ensure_ascii=False)},
         ]
-        llm = _Counting(self.llm)
-        first = output = llm.chat(messages, purpose="task").text
+        first = output = self.llm.chat(messages, purpose="task").text
         failed = self.check(task, output) if self.check else None
         n = 0
         for stage in self.retries:
             if failed is None:
                 break
-            r = stage.retry(task, output, failed, context, llm)
+            r = stage.retry(task, output, failed, context, self.llm)
             self.memory.write(Event("reflection", r.note, task.tags, "retry"), now)
             output, n = r.output, n + 1
             failed = self.check(task, output)
-        return AgentResult(output, first, n, llm.tokens, failed)
+        return AgentResult(output, first, n, self.llm.budget.used - before, failed)
 
-
-class _Counting:
-    """Sums the tokens of every completion one task sees, retry calls included."""
-
-    def __init__(self, llm: LLMClient):
-        self.llm = llm
-        self.tokens = 0
-
-    def chat(self, messages: list[dict], *, purpose: str) -> Completion:
-        c = self.llm.chat(messages, purpose=purpose)
-        self.tokens += c.prompt_tokens + c.completion_tokens
-        return c

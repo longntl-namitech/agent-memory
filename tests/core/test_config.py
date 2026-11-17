@@ -1,11 +1,12 @@
+import json
 from datetime import datetime
 
 import pytest
 
 from agent_memory.core import registry
 from agent_memory.core.config import Config, ConfigError, build, load_config
-from agent_memory.core.layout import Store
-from agent_memory.core.llm import Completion
+from agent_memory.core.layout import Entry, Store
+from agent_memory.core.llm import Completion, TokenBudget
 from agent_memory.core.memory import AgentResult, Event, MemoryAgent, RetryResult, Task
 
 NOW = datetime(2026, 1, 5, 9)
@@ -22,13 +23,19 @@ def clean_registry():
 
 
 class FakeLLM:
+    """Mirrors LLMClient: a repeat of the same messages is a cache hit and costs the budget 0."""
+
     def __init__(self, replies=("out",)):
         self.replies = list(replies)
-        self.messages = []
+        self.budget = TokenBudget(None)
+        self.cache = {}
 
     def chat(self, messages, *, purpose):
-        self.messages.append(messages)
-        return Completion(self.replies.pop(0) if len(self.replies) > 1 else self.replies[0], 3, 4)
+        key = json.dumps(messages, sort_keys=True)
+        if key not in self.cache:
+            self.cache[key] = Completion(self.replies.pop(0) if len(self.replies) > 1 else self.replies[0], 3, 4)
+            self.budget.spend(7)
+        return self.cache[key]
 
 
 def fake_stages():
@@ -117,7 +124,50 @@ def test_default_stand_ins(tmp_path):
     result = agent.run_task(TASK, NOW)
     agent.memory.forget(NOW)
     assert calls == [("write", "hi"), ("recall", "Route")]
-    assert result == AgentResult("out", "out", 0, 7, None)
+    assert (result.output, result.first_output, result.retries, result.failed_check) == ("out", "out", 0, None)
+
+
+def entry(text):
+    return Entry(id=text, kind="log", key=None, tags=[], text=text, importance=1,
+                 created_at=NOW, last_used_at=NOW, expires_at=None, status="active")
+
+
+def test_write_stage_persists_its_own_entries(tmp_path):
+    fake_stages()
+
+    @registry.register("persisting", "write")
+    class Persisting:
+        def write(self, event, store, now, llm):
+            e = entry(event.text)
+            store.add(e)
+            return [e]  # informational only
+
+    cfg = load_config(toml(tmp_path, '[write]\nstage = "persisting"\n'))
+    store = Store(tmp_path / "s")
+    build(cfg, llm=FakeLLM(), store=store).memory.write(Event("email", "hi", [], "inbox"), NOW)
+    assert [e.text for e in store.log()] == ["hi"]  # StagedMemory added no duplicate
+
+
+def test_tokens_are_budget_delta(tmp_path):
+    fake_stages()
+
+    @registry.register("llm_write", "write")
+    class LLMWrite:  # stands in for write_filter: an LLM call inside memory
+        def write(self, event, store, now, llm):
+            llm.chat([{"role": "user", "content": event.text}], purpose="write")
+            return []
+
+    @registry.register("reflexion", "retry")
+    class Reflexion:
+        def retry(self, task, first_output, failed_check, context, llm):
+            return RetryResult(llm.chat([], purpose="retry").text, "note")
+
+    cfg = load_config(toml(tmp_path, '[write]\nstage = "llm_write"\n[reflect]\nstages = ["reflexion"]\n'))
+    llm = FakeLLM(["bad", "good", "ok"])
+    agent = build(cfg, llm=llm, store=Store(tmp_path / "s"), check=lambda t, out: None if out == "good" else "x")
+    # task call + retry call + write-stage call on the retry note, 7 each
+    assert agent.run_task(TASK, NOW).tokens == 21 == llm.budget.used
+    assert agent.run_task(TASK, NOW).tokens == 0  # every call is a cache hit
 
 
 def test_retry_runs_on_failed_check(tmp_path):
