@@ -7,7 +7,7 @@ import pytest
 from agent_memory.core.clock import SimClock
 from agent_memory.core.eval.checks import NEW_LINK, SIGN_OFF, check
 from agent_memory.core.eval.simulation import SimulationAborted, WeekMetrics, active_rules, run_simulation
-from agent_memory.core.layout import Store
+from agent_memory.core.layout import MAX_RULES, Entry, RulesFull, Store
 from agent_memory.core.llm import BudgetExceeded, Completion, TokenBudget
 from agent_memory.core.memory import AgentResult, MemoryAgent, StagedMemory, Task
 from agent_memory.core.review import Reviewer
@@ -201,6 +201,45 @@ def test_crash_keeps_partial_metrics(tmp_path):
     assert sorted(exc.metrics) == [1, 2, 3, 4]
     assert exc.metrics[1].corrections == 7 and exc.metrics[1].tokens == 100
     assert exc.metrics[2].tokens == 20 and exc.metrics[3] == WeekMetrics(0, 0, 0, 0, 0)
+
+
+def test_rules_full_aborts_with_partial_metrics(tmp_path):
+    store = Store(tmp_path / "s")
+    for i in range(MAX_RULES):
+        store.add(Entry(id=f"r{i}", kind="rule", key=None, tags=[], text=f"rule {i}", importance=1,
+                        created_at=START, last_used_at=START, expires_at=None, status="active"))
+    with pytest.raises(SimulationAborted) as info:
+        run_simulation(StubAgent(perfect), load_tasks(), SimClock(START), None, store=store)
+    exc = info.value
+    assert isinstance(exc.__cause__, RulesFull)  # the planted rule at task 10 is the 21st
+    assert exc.completed_tasks == 10 and exc.metrics[1] == WeekMetrics(0, 0, 0, 0, 100)
+    assert exc.metrics[2] == WeekMetrics(0, 0, 0, 0, 0)
+
+
+class SpendingAgent(StubAgent):
+    """Exposes `llm.budget` like MemoryAgent; spends tokens on the crashing task before raising."""
+
+    def __init__(self, crash_at):
+        super().__init__(perfect)
+        self.llm = FakeLLM()
+        self.crash_at = crash_at
+
+    def run_task(self, task, now):
+        self.llm.budget.spend(7)
+        if task.id == self.crash_at:
+            raise BudgetExceeded("over")
+        return super().run_task(task, now)
+
+
+def test_crashed_task_tokens_reported(tmp_path):
+    with pytest.raises(SimulationAborted) as info:
+        run(SpendingAgent(crash_at=3), tmp_path)
+    exc = info.value
+    assert exc.crashed_tokens == 7 and exc.completed_tasks == 3
+    assert exc.metrics[1].tokens == 30  # finished tasks only; the crashed spend is reported separately
+    with pytest.raises(SimulationAborted) as info:
+        run(StubAgent(perfect, raise_at=3), tmp_path)
+    assert info.value.crashed_tokens is None  # agent exposes no budget
 
 
 def test_clock_must_start_on_monday(tmp_path):

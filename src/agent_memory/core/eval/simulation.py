@@ -27,14 +27,19 @@ class WeekMetrics:
 
 
 class SimulationAborted(RuntimeError):
-    """Raised when the agent fails mid-run; carries the per-week metrics of every finished task."""
+    """Raised when the agent fails mid-run; carries the per-week metrics of every finished task.
+
+    `crashed_tokens` is what the unfinished step spent (budget delta), or None if the agent exposes no budget.
+    """
 
     partial = True
 
-    def __init__(self, metrics: dict[int, WeekMetrics], completed_tasks: int, cause: BaseException):
+    def __init__(self, metrics: dict[int, WeekMetrics], completed_tasks: int, cause: BaseException,
+                 crashed_tokens: int | None = None):
         super().__init__(f"simulation aborted after {completed_tasks} tasks: {cause!r}")
         self.metrics = metrics
         self.completed_tasks = completed_tasks
+        self.crashed_tokens = crashed_tokens
 
 
 def _load(name: str):
@@ -64,9 +69,14 @@ def run_simulation(agent: Agent, tasks: list[Task], clock: SimClock, reviewer: R
     rule_text = {c["id"]: c["rule"] for c in corrections}
     told: set[str] = set()
     done = 0
+    # Only to price a crashed step: the per-call token returns above it are lost when a call raises.
+    budget = getattr(getattr(agent, "llm", None), "budget", None)
+    used = lambda: budget.used if budget is not None else 0
+    mark = used()
     try:
         for i, task in enumerate(tasks):
             m = WeekMetrics()  # this task's share, added to its week only once the task finishes
+            mark = used()
             prev, nxt = tasks[i - 1] if i else None, tasks[i + 1] if i + 1 < len(tasks) else None
             new_day = prev is None or (prev.week, prev.day) != (task.week, task.day)
             slot = 0 if new_day else slot + 1
@@ -104,7 +114,9 @@ def run_simulation(agent: Agent, tasks: list[Task], clock: SimClock, reviewer: R
 
             if task.day == 5 and (nxt is None or (nxt.week, nxt.day) != (task.week, task.day)):
                 clock.set(at(task, 17))
+                mark = used()
                 week.tokens += agent.reflect(clock.now())
     except Exception as exc:  # BudgetExceeded included: keep what was measured so far
-        raise SimulationAborted(metrics, done, exc) from exc
+        crashed = used() - mark if budget is not None else None
+        raise SimulationAborted(metrics, done, exc, crashed) from exc
     return metrics
