@@ -25,6 +25,11 @@ control, built-in stores off). Checked against Hermes v0.23.2, see `docs/hermes-
 - `close()` runs `hermes gateway stop` under the same `HERMES_HOME` (a call may auto-start a background gateway;
   a failure or a timeout of the stop is ignored), then wipes the run state again: no memory or session content
   is left behind after a success, a failure or a crash. The runtime stays.
+- The version for the result header comes from `hermes --version` run with `HERMES_HOME` set to the install home
+  (`install_home`, default `.hermes-home`, taken from the repo root), not the data root: `--version` exits 1
+  ("no dependency environment ... run 'hermes pm repair'") in a data root `-z` has not bootstrapped yet. A failing
+  `--version` records `unknown (hermes --version exited N)` and the run goes on. Apart from `-z`, the only call on
+  the data root is `gateway stop`, whose failure is ignored.
 - One fresh session per task:
   `HERMES_HOME=<data root> hermes -z PROMPT --usage-file PATH --provider custom -m MODEL -t memory,file,todo`
   (`-t file,todo` without memory). No `skills` toolset: emails need no skills, and skills the model writes would

@@ -13,7 +13,8 @@ SECRET = "sk-sentinel-12345"
 def setup(monkeypatch, tmp_path, **env):
     home = tmp_path / "hermes-home"
     log = tmp_path / "calls.log"
-    deps = {"binary": FAKE_HERMES, "profile_root": home,
+    (tmp_path / "install" / "installs").mkdir(parents=True)  # a bootstrapped install home
+    deps = {"binary": FAKE_HERMES, "profile_root": home, "install_home": tmp_path / "install",
             "env": {"HOME": str(tmp_path / "fake-home"), "FAKE_HERMES_LOG": str(log),
                     "FAKE_HERMES_INPUT_TOKENS": "800", "FAKE_HERMES_OUTPUT_TOKENS": "150",
                     "FAKE_HERMES_AUX_TOKENS": "50", "OPENAI_API_KEY": SECRET, **env}}
@@ -64,6 +65,15 @@ def test_run_prints_table_and_extrapolation(monkeypatch, tmp_path, capsys):
     assert "one two three" not in text
     for needle in ("biased downward", "hermes_no_memory", "overshoot it", "6,301 tokens"):
         assert needle in out and needle in text
+    assert no_run_state(home)
+
+
+def test_failing_version_does_not_stop_the_pilot(monkeypatch, tmp_path, capsys):
+    home, _ = setup(monkeypatch, tmp_path)
+    (tmp_path / "install" / "installs").rmdir()  # --version exits 1 ("no dependency environment")
+    assert cli.main(args(tmp_path, "--run", "--max-tokens", "50000")) == 0
+    text = (tmp_path / "results" / "pilot_hermes_default.md").read_text()
+    assert "- hermes_version: unknown (hermes --version exited 1)" in text and "- tokens: 3000" in text
     assert no_run_state(home)
 
 

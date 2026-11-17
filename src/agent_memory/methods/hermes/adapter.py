@@ -93,10 +93,13 @@ class HermesAgent(Agent):
 
     def __init__(self, profile_root: Path, model: str, memory_enabled: bool, binary: str = "hermes", *,
                  base_url: str | None = None, key_env: str | None = None, max_turns: int = 20,
-                 timeout: float = 600, budget: TokenBudget | None = None, env: dict | None = None):
+                 timeout: float = 600, budget: TokenBudget | None = None, env: dict | None = None,
+                 install_home: Path = Path(".hermes-home")):
         if key_env is not None and not _KEY_ENV.fullmatch(key_env):
             raise ValueError(f"key_env must be an environment variable name, got {key_env!r}")
         self.profile_root = (REPO / profile_root).resolve()  # an absolute profile_root is kept as is
+        # the bootstrapped install's home, only for `--version`: it exits 1 in a data root -z has not bootstrapped
+        self.install_home = (REPO / install_home).resolve()
         self.model, self.memory_enabled, self.binary = model, memory_enabled, binary
         self.base_url, self.key_env, self.max_turns, self.timeout = base_url, key_env, max_turns, timeout
         self.budget = budget or TokenBudget(None)  # Hermes calls the model itself, so its usage is spent here
@@ -115,22 +118,17 @@ class HermesAgent(Agent):
     def tokens_used(self) -> int:
         return self.budget.used
 
-    def _call(self, args: list[str], cwd: Path, timeout: float | None = None) -> subprocess.CompletedProcess:
+    def _call(self, args: list[str], cwd: Path, timeout: float | None = None,
+              env: dict | None = None) -> subprocess.CompletedProcess:
         timeout = timeout or self.timeout
         try:
-            return subprocess.run([self.binary, *args], env=self.env, cwd=cwd, capture_output=True, text=True,
+            return subprocess.run([self.binary, *args], env=env or self.env, cwd=cwd, capture_output=True, text=True,
                                   timeout=timeout)
         except subprocess.TimeoutExpired as exc:
             raise HermesError(f"hermes {args[0]} timed out after {timeout}s") from exc
         except FileNotFoundError as exc:
             raise HermesError(f"hermes binary {self.binary!r} not found (PATH={self.env.get('PATH', '')}); "
                               "set `binary` in the [hermes] config table") from exc
-
-    def _checked(self, args: list[str], cwd: Path) -> subprocess.CompletedProcess:
-        p = self._call(args, cwd)
-        if p.returncode != 0:
-            raise HermesError(f"hermes {' '.join(args[:2])} exited {p.returncode}: {p.stderr.strip()[-500:]}")
-        return p
 
     # lifecycle
 
@@ -182,9 +180,17 @@ class HermesAgent(Agent):
         self.close()
 
     def version(self) -> str:
-        out = self._checked(["--version"], self.profile_root if self.profile_root.is_dir() else Path.cwd()).stdout
-        m = re.search(r"\d+\.\d+\.\d+\S*", out)
-        return m.group(0) if m else out.strip()
+        """The Hermes version, read under the install home; never raises (it only goes into the result header)."""
+        cwd = self.install_home if self.install_home.is_dir() else Path.cwd()
+        try:
+            p = self._call(["--version"], cwd, timeout=min(self.timeout, 60),
+                           env={**self.env, "HERMES_HOME": str(self.install_home)})
+        except HermesError as exc:
+            return f"unknown ({exc})"
+        if p.returncode != 0:
+            return f"unknown (hermes --version exited {p.returncode})"
+        m = re.search(r"\d+\.\d+\.\d+\S*", p.stdout)
+        return m.group(0) if m else p.stdout.strip()
 
     # Agent protocol
 

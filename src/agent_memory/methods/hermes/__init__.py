@@ -19,4 +19,4 @@ def make_hermes(config, llm, store, **deps) -> HermesAgent:
                        base_url=opts.get("base_url") or os.environ.get("OPENAI_BASE_URL"),
                        key_env=opts.get("key_env"), max_turns=opts.get("max_turns", 20),
                        timeout=opts.get("timeout", 600), budget=llm.budget if llm is not None else None,
-                       env=opts.get("env"))
+                       env=opts.get("env"), install_home=Path(opts.get("install_home", ".hermes-home")))

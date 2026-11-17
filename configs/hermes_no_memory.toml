@@ -4,6 +4,7 @@ agent = "hermes"
 [hermes]
 profile_root = ".hermes-lab/hermes_no_memory"  # this config's own Hermes data root (HERMES_HOME), reused across runs
 binary = "hermes"
+install_home = ".hermes-home"  # the bootstrapped install, only for `hermes --version`
 model = "gpt-5.4-nano"
 memory_enabled = false  # MEMORY.md and USER.md stores off, no memory toolset
 key_env = "OPENAI_API_KEY"  # the NAME of the variable holding the key; base_url defaults to $OPENAI_BASE_URL

@@ -29,6 +29,13 @@ never printed or written) changed the adapter design. Facts:
 4. **A call may auto-start a background gateway** (it exits after 600 s idle). Stop it with `hermes gateway stop`
    under the same `HERMES_HOME` (`hermes_cli/subcommands/gateway.py:181`).
 
+5. **`--version` needs a bootstrapped home; `-z` bootstraps by itself.** The first real pilot crashed before any
+   task: `hermes --version` under a fresh data root exits 1 with `hermes: no dependency environment is committed
+   for this install; run 'hermes pm repair'`, while `hermes -z ...` in a fresh data root prepares the runtime on
+   its own. The adapter now runs `--version` with `HERMES_HOME` set to the install home (`.hermes-home`, config
+   key `install_home`), and a failing `--version` gives `unknown (hermes --version exited N)` instead of stopping
+   the run. The only other call outside `-z` is `gateway stop`, whose failure is ignored.
+
 Verified by these calls: the real usage JSON shape; exit 2 with null usage on a missing key; the key via the
 environment works with a dedicated data root; `-t` accepted; `--provider custom` accepted. Still UNVERIFIED: exit
 codes 1 and 130 in practice, `memory_enabled: false` removing the memory tool, a `memory` tool write by the model.

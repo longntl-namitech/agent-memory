@@ -283,7 +283,8 @@ def test_hermes_estimate_only_prices_zero_and_says_pilot(monkeypatch, capsys):
 
 def hermes_run(monkeypatch, tmp_path, **env):
     home = tmp_path / "hermes-home"
-    deps = {"binary": FAKE_HERMES, "profile_root": home,
+    (tmp_path / "install" / "installs").mkdir(parents=True)  # a bootstrapped install home
+    deps = {"binary": FAKE_HERMES, "profile_root": home, "install_home": tmp_path / "install",
             "env": {"HOME": str(tmp_path / "fake-home"), "OPENAI_API_KEY": "sk-sentinel-cfg", **env}}
     monkeypatch.setattr(cli, "hermes_deps", lambda: deps)
     monkeypatch.setattr(cli, "make_llm", lambda budget: stub_llm(tmp_path, budget))

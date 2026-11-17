@@ -28,12 +28,19 @@ def home(tmp_path):
     return tmp_path / "hermes-home"
 
 
+def install(tmp_path) -> Path:
+    """A bootstrapped install home (has installs/), as the repo's .hermes-home is."""
+    (tmp_path / "install" / "installs").mkdir(parents=True, exist_ok=True)
+    return tmp_path / "install"
+
+
 def make(home, tmp_path, memory_enabled=True, **env):
     log = tmp_path / "argv.log"
     base = {"HOME": str(tmp_path / "fake-home"), "FAKE_HERMES_LOG": str(log),
             "FAKE_HERMES_HOME_LOG": str(tmp_path / "home.log"), "LAB_KEY": SENTINEL}
     return HermesAgent(home, "gpt-5.4-nano", memory_enabled, binary=FAKE, base_url="https://llm.example/v1",
-                       key_env="LAB_KEY", max_turns=7, timeout=10, env={**base, **env})
+                       key_env="LAB_KEY", max_turns=7, timeout=10, env={**base, **env},
+                       install_home=install(tmp_path))
 
 
 def calls(tmp_path) -> list[list[str]]:
@@ -83,7 +90,9 @@ def test_hermes_home_is_the_dedicated_data_root(home, tmp_path):
         assert 'default: "gpt-5.4-nano"' in config and 'base_url: "https://llm.example/v1"' in config
         assert agent.memory_path == home.resolve() / "memories" / "MEMORY.md"
     seen = (tmp_path / "home.log").read_text().splitlines()
-    assert len(seen) == len(calls(tmp_path)) >= 3 and set(seen) == {str(home.resolve())}
+    assert len(seen) == len(calls(tmp_path)) >= 3
+    assert seen[0] == str(install(tmp_path).resolve())  # --version runs under the install home
+    assert set(seen[1:]) == {str(home.resolve())}
     assert not (home / "profiles").exists()
 
 
@@ -308,8 +317,7 @@ def test_relative_profile_root_is_taken_from_the_repo_root(tmp_path, monkeypatch
 
 def test_missing_binary_gives_clear_error(home, tmp_path):
     agent = HermesAgent(home, "m", True, binary="no-such-hermes-binary", env={"PATH": "/nowhere"})
-    with pytest.raises(HermesError, match="no-such-hermes-binary.*PATH=/nowhere"):
-        agent.version()
+    assert "unknown" in agent.version()  # the version never stops a run
     with pytest.raises(HermesError, match="no-such-hermes-binary"):
         with agent:
             agent.run_task(TASK, NOW)
@@ -359,6 +367,22 @@ def test_memory_config_enables_stores(home, tmp_path):
         agent.start()
         config = (home / "config.yaml").read_text()
     assert "memory_enabled: true" in config and "user_profile_enabled: true" in config
+
+
+def test_version_reads_the_install_home_not_the_fresh_data_root(home, tmp_path):
+    agent = make(home, tmp_path)
+    assert agent.version() == "0.23.2"
+    assert not home.exists()  # the data root is neither needed nor touched for the version
+    agent.install_home = home  # a data root -z has not bootstrapped yet: real Hermes exits 1 there
+    assert agent.version() == "unknown (hermes --version exited 1)"  # never raises
+    with agent:
+        assert agent.run_task(TASK, NOW).output  # -z bootstraps the fresh data root by itself
+
+
+def test_install_home_defaults_to_the_repo_hermes_home(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    assert HermesAgent(tmp_path / "hh", "m", True).install_home == REPO / ".hermes-home"
+    assert HermesAgent(tmp_path / "hh", "m", True, install_home=Path("x")).install_home == REPO / "x"
 
 
 def test_version_parses_hermes_version(home, tmp_path):

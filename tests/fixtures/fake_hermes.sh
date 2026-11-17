@@ -3,6 +3,7 @@
 # It emulates a dedicated data root (HERMES_HOME, no -p): the first use "bootstraps" installs/ (the heavy runtime
 # the adapter must keep); a -z run writes run state the adapter must wipe (a session transcript, state.db and a
 # log line, all holding the prompt) and marks the background gateway as running; `gateway stop` stops it.
+# `--version` exits 1 ("no dependency environment") in a home without installs/; only -z bootstraps.
 # A -z run whose config.yaml names a key_env that is unset exits 2 with an all-null usage file (the real failure).
 # Behaviour comes from env vars:
 #   FAKE_HERMES_LOG             append each call's argv (fields split by \x1f, records end with \x1e)
@@ -25,7 +26,11 @@ if [ -n "${FAKE_HERMES_HOME_LOG:-}" ]; then
   printf '%s\n' "${HERMES_HOME:-}" >> "$FAKE_HERMES_HOME_LOG"
 fi
 
-if [ "${1:-}" = "--version" ]; then
+if [ "${1:-}" = "--version" ]; then  # like the real one: needs a home whose runtime is already bootstrapped
+  if [ ! -d "${HERMES_HOME:-/nonexistent}/installs" ]; then
+    echo "hermes: no dependency environment is committed for this install; run 'hermes pm repair'" >&2
+    exit 1
+  fi
   echo "Hermes Agent v0.23.2 (2026.9.24)"
   exit 0
 fi
