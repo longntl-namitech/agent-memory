@@ -1,0 +1,13 @@
+name = "no_recall"
+
+[write]
+stage = "write_filter"
+
+[sort]
+stage = "coala_stores"
+
+[reflect]
+stages = ["reflect", "reflexion"]
+
+[forget]
+stages = ["overwrite", "expire", "archive"]

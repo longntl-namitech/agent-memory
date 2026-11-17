@@ -1,0 +1,10 @@
+name = "b3_recall"
+
+[write]
+stage = "write_filter"
+
+[sort]
+stage = "coala_stores"
+
+[recall]
+stage = "tag_recall"

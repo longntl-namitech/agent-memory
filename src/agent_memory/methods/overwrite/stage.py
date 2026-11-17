@@ -4,7 +4,7 @@ from agent_memory.core.layout import Entry, Store, slug
 from agent_memory.core.registry import register
 
 
-@register("forget", "overwrite")
+@register("overwrite", "forget")
 class Overwrite:
     """Keeps one active fact per key: the earliest line's id and created_at, the newest line's content."""
 

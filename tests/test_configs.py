@@ -1,0 +1,145 @@
+import json
+
+import pytest
+
+import agent_memory.methods  # noqa: F401  registers the stages
+from agent_memory import cli
+from agent_memory.core.config import Config, build, load_config
+from agent_memory.core.eval.checks import check
+from agent_memory.core.eval.simulation import DATA, active_rules
+from agent_memory.core.layout import Store
+from agent_memory.core.llm import LLMClient, TokenBudget
+from agent_memory.core.memory import Task
+
+BASELINES = ["baseline_full_context", "baseline_naive_rag"]
+BUILD_UP = ["b1_write_filter", "b2_coala_stores", "b3_recall", "b4_reflect", "b5_forget", "full"]
+LEAVE_ONE_OUT = {"no_write_filter": "write", "no_coala_stores": "sort", "no_recall": "recall",
+                 "no_reflect": "reflect", "no_reflexion": "reflexion", "no_forget": "forget"}
+ALL = BASELINES + BUILD_UP + list(LEAVE_ONE_OUT)
+
+
+def units(c: Config) -> dict:
+    """One entry per ablatable stage; the whole forget list counts as one."""
+    return {"memory": c.memory, "write": c.write, "sort": c.sort, "recall": c.recall,
+            "reflect": "reflect" in c.reflect, "reflexion": "reflexion" in c.reflect, "forget": tuple(c.forget)}
+
+
+def stub_llm(tmp_path, budget=None, reply="SKIP"):
+    return LLMClient("stub", "stub-model", budget or TokenBudget(None), tmp_path / "llm",
+                     transport=lambda model, messages: (reply, 10, 5))
+
+
+class ToyEmbedder:
+    name = "toy"
+
+    def embed(self, texts):
+        import numpy as np
+        return np.array([[len(t), 1.0] for t in texts])
+
+
+def test_simulation_config_count_is_14():
+    assert sorted(p.stem for p in cli.CONFIGS.glob("*.toml")) == sorted(ALL)
+
+
+def test_every_config_validates(tmp_path):
+    for name in ALL:
+        cfg = load_config(cli.CONFIGS / f"{name}.toml")
+        assert cfg.name == name and cfg.agent is None
+        build(cfg, llm=stub_llm(tmp_path), store=Store(tmp_path / name), embedder=ToyEmbedder())
+
+
+def test_leave_one_out_each_differs_from_full_by_one_stage():
+    full = units(load_config(cli.CONFIGS / "full.toml"))
+    stand_in = units(Config())
+    for name, unit in LEAVE_ONE_OUT.items():
+        other = units(load_config(cli.CONFIGS / f"{name}.toml"))
+        assert [k for k in full if full[k] != other[k]] == [unit], name
+        assert other[unit] == stand_in[unit], name  # the removed stage falls back to the A1 stand-in
+
+
+def test_build_up_chain_adds_one_stage_each():
+    chain = [units(Config())] + [units(load_config(cli.CONFIGS / f"{n}.toml")) for n in BUILD_UP]
+    for prev, cur, name in zip(chain, chain[1:], BUILD_UP):
+        assert len([k for k in cur if cur[k] != prev[k]]) == 1, name
+    assert chain[-1]["recall"] == "tag_recall"  # tag_recall is the simulation recall
+
+
+def test_sim_check_uses_active_rules_of_the_task():
+    corrections = json.loads((DATA / "corrections.json").read_text())
+    sim_check = cli.sim_check(corrections)
+    lead = {"price": 1200, "deal_status": "open"}
+    for tid in range(40):
+        task = Task(id=tid, week=1, day=1, lead=lead, tags=["x"], wants_log=False)
+        expected = check(task, "Hello", active_rules(tid, corrections))
+        assert sim_check(task, "Hello") == (expected[0] if expected else None)
+    assert sim_check(Task(0, 1, 1, lead, ["x"], False), "Hello") is None  # no rule active yet
+
+
+def no_llm(*_a, **_k):
+    raise AssertionError("no LLM may be built")
+
+
+def test_estimate_only_is_default_and_calls_no_llm(monkeypatch, capsys):
+    monkeypatch.setattr(cli, "make_llm", no_llm)
+    assert cli.main(["run", "--eval", "simulation", "--configs", ",".join(ALL)]) == 0
+    out = capsys.readouterr().out
+    assert "full: 100000" in out and "total: 1400000" in out
+    assert "above 5,000,000: no" in out and "placeholder" in out
+    assert "estimate only, nothing was run" in out
+
+
+def test_unknown_config_lists_available(capsys):
+    with pytest.raises(SystemExit) as exc:
+        cli.main(["run", "--eval", "simulation", "--configs", "full,nope"])
+    assert exc.value.code == 2
+    err = capsys.readouterr().err
+    assert "nope" in err and "baseline_naive_rag" in err
+
+
+def test_max_tokens_below_estimate_refused_before_llm(monkeypatch, capsys):
+    monkeypatch.setattr(cli, "make_llm", no_llm)
+    assert cli.main(["run", "--eval", "simulation", "--configs", "full",
+                     "--no-estimate-only", "--max-tokens", "1000"]) != 0
+    assert "exceeds max_tokens" in capsys.readouterr().err
+
+
+def test_longmemeval_not_implemented_but_estimates(monkeypatch, capsys):
+    monkeypatch.setattr(cli, "make_llm", no_llm)
+    assert cli.main(["run", "--eval", "longmemeval", "--configs", "full"]) == 0
+    assert "total: 5750000" in capsys.readouterr().out
+    assert cli.main(["run", "--eval", "longmemeval", "--configs", "full", "--no-estimate-only"]) == 2
+    assert "not implemented" in capsys.readouterr().err
+
+
+def test_run_writes_result_with_stub_llm(monkeypatch, tmp_path):
+    budget_seen = []
+
+    def make(budget):
+        budget_seen.append(budget)
+        return stub_llm(tmp_path, budget)
+
+    monkeypatch.setattr(cli, "make_llm", make)
+    results = tmp_path / "results"
+    assert cli.main(["run", "--eval", "simulation", "--configs", "full", "--no-estimate-only",
+                     "--max-tokens", "500000", "--out", str(tmp_path / "stores"),
+                     "--results-dir", str(results)]) == 0
+    assert budget_seen[0].max_tokens == 500000
+    text = (results / "simulation_full.md").read_text()
+    assert "# simulation - full" in text and "PARTIAL" not in text
+    assert "- model: stub-model" in text and "- seed: 7" in text
+    # "SKIP" fails VAT once that rule is active, so reflexion ran: proof the retry check is wired
+    reflexion = int(text.split("- reflexion_fallbacks: ")[1].split("\n")[0])
+    assert reflexion > 0 and "- write_filter_fallbacks: " in text and "- reflect_failures: " in text
+    assert "week 4" in text
+
+
+def test_budget_blown_mid_run_writes_partial(monkeypatch, tmp_path):
+    monkeypatch.setattr(cli, "make_llm", lambda budget: stub_llm(tmp_path, budget))
+    real = cli.estimate
+    monkeypatch.setattr(cli, "estimate", lambda *_a: real("simulation", []))  # estimate 0 passes the gate
+    results = tmp_path / "results"
+    code = cli.main(["run", "--eval", "simulation", "--configs", "baseline_full_context", "--no-estimate-only",
+                     "--max-tokens", "100", "--out", str(tmp_path / "stores"), "--results-dir", str(results)])
+    assert code != 0
+    text = (results / "simulation_baseline_full_context.md").read_text()
+    assert text.startswith("PARTIAL RESULT") and "- crashed_tokens: " in text and "- completed_tasks: " in text

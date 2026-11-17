@@ -6,7 +6,7 @@ from agent_memory.core.registry import register
 ARCHIVE_AFTER_DAYS = 30
 
 
-@register("forget", "archive")
+@register("archive", "forget")
 class Archive:
     """Archives every active rule not used (rendered by a recall stage) for 30 days or more."""
 

@@ -6,7 +6,7 @@ from agent_memory.core.registry import register
 EXPIRY_DAYS = 7
 
 
-@register("forget", "expire")
+@register("expire", "forget")
 class Expire:
     """Gives active log lines `expires_at = created_at + 7 days` and archives any active entry whose expiry has passed."""
 
