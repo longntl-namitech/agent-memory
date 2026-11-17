@@ -247,3 +247,7 @@ def test_results_mark_baseline_and_reflexion_metrics(monkeypatch, tmp_path):
             assert values == ["n/a (baseline has no RULES)"] * 4
         else:
             assert all(v.isdigit() for v in values)
+
+
+def test_counters_empty_for_agent_without_memory_or_retries():
+    assert cli._counters(object()) == {}

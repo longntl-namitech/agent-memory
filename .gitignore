@@ -17,3 +17,4 @@ wheels/
 profiles/
 .pytest_cache/
 .ruff_cache/
+.superpowers/

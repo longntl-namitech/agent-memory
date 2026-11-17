@@ -66,9 +66,9 @@ def _counters(agent) -> dict:
     from agent_memory.methods.reflexion.stage import Reflexion
     from agent_memory.methods.write_filter.stage import WriteFilter
 
-    mem = agent.memory
+    mem = getattr(agent, "memory", None)  # an outside agent (Hermes) may have neither; never crash before write
     out = {}
-    for s in [getattr(mem, "writer", None), *getattr(mem, "reflectors", []), *agent.retries]:
+    for s in [getattr(mem, "writer", None), *getattr(mem, "reflectors", []), *(getattr(agent, "retries", None) or [])]:
         if isinstance(s, WriteFilter):
             out["write_filter_fallbacks"] = s.fallbacks
             out["write_filter_dropped_rules"] = s.dropped_rules
