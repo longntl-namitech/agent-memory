@@ -104,7 +104,7 @@ class HermesAgent(Agent):
         self.base_url, self.key_env, self.max_turns, self.timeout = base_url, key_env, max_turns, timeout
         self.budget = budget or TokenBudget(None)  # Hermes calls the model itself, so its usage is spent here
         self.env = {**os.environ, **(env or {}), "HERMES_HOME": str(self.profile_root)}
-        self.workdir = self.profile_root / "workspace"  # cwd of each call: no AGENTS.md, file tool writes are wiped
+        self.workdir = self.profile_root / "workspace"  # cwd of each call: no AGENTS.md, wiped
         self.memory_path = self.profile_root / "memories" / "MEMORY.md"
         self.llm = None  # no LLMClient: the simulation's crash pricing must not look for one
         self.failed_attempts = 0
@@ -217,8 +217,9 @@ class HermesAgent(Agent):
         self.start()
         usage = self.profile_root / "usage.json"
         usage.unlink(missing_ok=True)
-        # never terminal; no skills: emails need none, and skills the model writes would carry over between runs
-        toolsets = "memory,file,todo" if self.memory_enabled else "file,todo"
+        # no terminal, skills or file: skills and file writes would outlive the wipe, and file can read the repo
+        # (corrections, blocklist, earlier results); an email needs none of them
+        toolsets = "memory,todo" if self.memory_enabled else "todo"
         p = self._call(["-z", self._prompt(task), "--usage-file", str(usage),
                         "--provider", "custom", "-m", self.model, "-t", toolsets], self.workdir)
         self._pending = []

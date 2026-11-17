@@ -51,8 +51,10 @@ child-process ledger whose entries carry the argv, so the prompt), plus the adap
 and `usage.json`. The runtime (`installs/`, `cache/`, the checkout and the rest) is kept.
 
 Recommended argv now (after the first real calls): `HERMES_HOME=<data root> hermes -z PROMPT --usage-file PATH
---provider custom -m MODEL -t memory,file,todo` (`-t file,todo` for `hermes_no_memory`). The `skills` toolset is
-dropped: emails need no skills, and skills the model writes would carry over between runs.
+--provider custom -m MODEL -t memory,todo` (`-t todo` for `hermes_no_memory`). The `skills` toolset is dropped
+(skills the model writes would carry over between runs) and so is `file` (its write guard only blocks sensitive
+system paths, so it could write outside the wiped run state and read the repo: corrections, blocklist, earlier
+results). An email needs neither.
 
 The sections below are the Task 22 check, written for the named-profile design; the profile parts are superseded.
 
@@ -199,6 +201,6 @@ accounting use `total_including_auxiliary.total_tokens`, because auxiliary calls
 - Real exit codes for a budget stop (`agent.max_turns`) and for an empty reply (1), and for an interrupt (130).
 - `memory_enabled: false` really removes the `memory` tool and the MEMORY.md block from the system prompt
   (code reads the flag at `memory_tool.py:305-309`; not exercised).
-- `-t memory,file,todo` leaves no terminal access (the flag is accepted; toolset contents read, not run).
+- `-t memory,todo` leaves no terminal or file access (the flag is accepted; toolset contents read, not run).
 - A `memory` tool write (`add`, `patch`) made by the model in a real run.
 - That the `hermes pm repair` notice does not block a real run.

@@ -16,12 +16,12 @@ control, built-in stores off). Checked against Hermes v0.23.2, see `docs/hermes-
 - Reset at `start()` (the first `run_task` or `plant_rule`): wipe the run state, then write `config.yaml` (always
   overwritten): model, `provider: custom`, `base_url`, `key_env`, `agent.max_turns`, and `memory_enabled` /
   `user_profile_enabled` (both `false` for `hermes_no_memory`). The run state is `memories/`, `sessions/`,
-  `state.db*`, `checkpoints/`, `logs/`, `pending_messages/`, `response_store.db*`, `spawn-ledger.json*` (each call's argv, prompt included), plus the adapter's
-  `workspace/` (the cwd of each call) and `usage.json` (paths checked in `docs/hermes-flags.md`). The runtime
+  `state.db*`, `checkpoints/`, `logs/`, `pending_messages/`, `response_store.db*`, `spawn-ledger.json*` (each call's argv, prompt included), plus the
+  adapter's `workspace/` (the cwd of each call) and `usage.json` (paths checked in `docs/hermes-flags.md`). The runtime
   (`installs/`, `cache/` and the rest) is kept. Because the reset runs at start, a run killed before `close()`
   does not leak its memory into the next run. Other stores that could hold content (`cron/`, `kanban.db`,
-  `projects.db`, `plans/`, `tmp/`) are not wiped, because the toolsets passed (`memory`, `file`, `todo`) do not
-  reach them.
+  `projects.db`, `plans/`, `tmp/`) are not wiped: the only toolsets passed are `memory` (writes `memories/`) and
+  `todo`, so the model has no tool that writes there.
 - `close()` runs `hermes gateway stop` under the same `HERMES_HOME` (a call may auto-start a background gateway;
   a failure or a timeout of the stop is ignored), then wipes the run state again: no memory or session content
   is left behind after a success, a failure or a crash. The runtime stays.
@@ -31,9 +31,11 @@ control, built-in stores off). Checked against Hermes v0.23.2, see `docs/hermes-
   `--version` records `unknown (hermes --version exited N)` and the run goes on. Apart from `-z`, the only call on
   the data root is `gateway stop`, whose failure is ignored.
 - One fresh session per task:
-  `HERMES_HOME=<data root> hermes -z PROMPT --usage-file PATH --provider custom -m MODEL -t memory,file,todo`
-  (`-t file,todo` without memory). No `skills` toolset: emails need no skills, and skills the model writes would
-  carry over between runs (the data root keeps `skills/`). The prompt is the lab's own task text (`TASK_PROMPT` plus the lead
+  `HERMES_HOME=<data root> hermes -z PROMPT --usage-file PATH --provider custom -m MODEL -t memory,todo`
+  (`-t todo` without memory). No `skills`, `file` or `terminal` toolset: an email needs none of them; skills the
+  model writes would carry over between runs (the data root keeps `skills/`), and Hermes v0.23.2's file write
+  guard only blocks sensitive system paths, so `file` could write outside the wiped state and read the repo
+  (corrections, blocklist, earlier results). The prompt is the lab's own task text (`TASK_PROMPT` plus the lead
   JSON, shared with MemoryAgent), then the corrections received since the last task as user text. Memory persists
   across the tasks of a run only through `<data root>/memories/MEMORY.md`.
 - Exit codes: 0 is the email. 2 (failed or partial) and 1 (no text) are failed attempts: `output` is `""`,
@@ -62,7 +64,7 @@ control, built-in stores off). Checked against Hermes v0.23.2, see `docs/hermes-
   A missing binary raises `HermesError` naming the binary and PATH.
 - No `--ignore-user-config`: it freezes built-in defaults, which would ignore `memory_enabled: false` and the
   endpoint in `config.yaml`. The dedicated data root with an adapter-written `config.yaml` gives the same isolation.
-- No `--ignore-rules`: it also skips memory, the thing under test. No `terminal` toolset.
+- No `--ignore-rules`: it also skips memory, the thing under test. No `terminal`, `file` or `skills` toolset.
 - The API key stays in the environment variable named by `key_env`. It is never written to `config.yaml` or
   any other file, put on the command line or logged.
 - `close()` runs in a `finally` in the runner and in the pilot, so a crash or a budget stop also stops the gateway
