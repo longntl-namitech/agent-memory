@@ -150,7 +150,8 @@ class MemoryAgent(Agent):
             if failed is None:
                 break
             r = stage.retry(task, output, failed, context, self.llm)
-            self.memory.write(Event("reflection", r.note, task.tags, "retry"), now)
+            if r.note.strip():
+                self.memory.write(Event("reflection", r.note, task.tags, "retry"), now)
             output, n = r.output, n + 1
             failed = self.check(task, output)
         return AgentResult(output, first, n, self.llm.budget.used - before, failed)
