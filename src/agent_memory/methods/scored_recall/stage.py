@@ -45,6 +45,7 @@ class ScoredRecall:
     @embedder.setter
     def embedder(self, value: Embedder | None) -> None:
         self._embedder = value
+        self._vecs.clear()  # cached vectors came from the old embedder
 
     def recall(self, task: Task, store: Store, now: datetime, route: Route) -> str:
         r = route(store, task)

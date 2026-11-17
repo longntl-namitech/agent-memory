@@ -111,3 +111,18 @@ def test_embedder_property_injects(tmp_path, monkeypatch):
     out = st.recall(task(), s, NOW, lambda store, t: Routed(rules=[], facts=[x], log=[]))
     assert emb.calls
     assert "cos=0.5 alpha" in out
+
+
+def test_embedder_swap_clears_cached_vectors(tmp_path):
+    s = Store(tmp_path)
+    x = e("a", text="cos=0.5 alpha")
+    s.add(x)
+    route = lambda store, t: Routed(rules=[], facts=[x], log=[])
+    a, b = Fake(), Fake()
+    st = ScoredRecall(embedder=a)
+    st.recall(task(), s, NOW, route)
+    calls_a = len(a.calls)
+    st.embedder = b
+    st.recall(task(), s, NOW, route)
+    assert len(a.calls) == calls_a
+    assert any("cos=0.5 alpha" in t for call in b.calls for t in call)
