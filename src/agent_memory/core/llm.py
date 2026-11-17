@@ -36,11 +36,12 @@ class TokenBudget:
 
 
 class LLMClient:
-    def __init__(self, base_url: str, model: str, budget: TokenBudget, cache_dir, transport: Transport | None = None):
+    def __init__(self, base_url: str, model: str, budget: TokenBudget, cache_dir, transport: Transport | None = None, *, read_cache: bool = True):
         self.base_url = base_url
         self.model = model
         self.budget = budget
         self.cache_dir = Path(cache_dir)
+        self.read_cache = read_cache
         self._transport = transport or self._openai_transport
 
     def _openai_transport(self, model: str, messages: list[dict]) -> tuple[str, int, int]:
@@ -61,7 +62,7 @@ class LLMClient:
 
     def chat(self, messages: list[dict], *, purpose: str) -> Completion:
         path = self._path(messages)
-        if path.exists():
+        if self.read_cache and path.exists():
             return Completion(**json.loads(path.read_text(encoding="utf-8")))
         self.budget.spend(0)  # refuse new calls once the budget is already blown
         text, prompt, completion = self._transport(self.model, messages)

@@ -67,3 +67,29 @@ def test_cache_key_includes_model(tmp_path):
     b = client(tmp_path, fake, model="b")[0].chat(MSGS, purpose="t")
     assert fake.calls == 2
     assert a.text != b.text
+
+
+def test_read_cache_default_unchanged(tmp_path):
+    fake = Fake()
+    llm, _ = client(tmp_path, fake)
+    assert llm.read_cache is True
+    llm.chat(MSGS, purpose="t")
+    llm.chat(MSGS, purpose="t")
+    assert fake.calls == 1
+
+
+def test_read_cache_false_always_calls(tmp_path):
+    fake = Fake()
+    budget = TokenBudget(None)
+    llm = LLMClient("http://x", "m", budget, tmp_path, transport=fake, read_cache=False)
+    llm.chat(MSGS, purpose="t")
+    llm.chat(MSGS, purpose="t")
+    assert fake.calls == 2
+    assert budget.used == 14
+
+
+def test_read_cache_false_still_writes(tmp_path):
+    fake = Fake()
+    LLMClient("http://x", "m", TokenBudget(None), tmp_path, transport=fake, read_cache=False).chat(MSGS, purpose="t")
+    client(tmp_path, fake)[0].chat(MSGS, purpose="t")
+    assert fake.calls == 1
