@@ -37,7 +37,6 @@ class WriteFilter(WriteStage):
         if event.kind == "correction":
             if _norm(event.text) in self._seen_corrections:
                 return []  # already handled: skip the LLM call so reworded copies cannot fill the rule cap
-            self._seen_corrections.add(_norm(event.text))
         keys = sorted({f.key for t in event.tags for f in store.facts(t)} or {f.key for f in store.facts()})
         prompt = _PROMPT.format(keys=", ".join(keys) or "(none)", kind=event.kind,
                                 tags=", ".join(event.tags) or "(none)", text=event.text)
@@ -54,6 +53,7 @@ class WriteFilter(WriteStage):
                                                  importance=d["importance"], created_at=now, last_used_at=now,
                                                  expires_at=None, status="active")
         if kind == "rule":
+            self._seen_corrections.add(_norm(event.text))  # a rule outcome was reached: later copies skip the LLM
             if any(_norm(r.text) == _norm(text) for r in store.rules()):
                 return []  # duplicate
             if len(store.rules()) >= MAX_RULES:

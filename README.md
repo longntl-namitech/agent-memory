@@ -143,7 +143,7 @@ For LongMemEval the full set is above 5,000,000 tokens. The rule is to run a sub
 - The LongMemEval date format and the placeholder token overheads are UNVERIFIED until the first real download and run.
 - The simulation token estimate is a placeholder until a measured run.
 - Each simulation config is capped at 100,000 tokens (the spec's limit). A stub run used about 147,000 for `baseline_full_context`, so some configs may stop with a PARTIAL result. `--per-config-cap N` raises the cap; take that decision after a pilot run.
-- `write_filter` handles each distinct correction text once per run. The same correction written again (after a violation) makes no LLM call, so reworded copies cannot fill the 20-rule cap. Rules skipped because 20 are already active are counted as `write_filter_dropped_rules` in the results.
+- `write_filter` handles each distinct correction text until it reaches a rule outcome (stored, duplicate or dropped at the cap). After that, the same correction written again (after a violation) makes no LLM call, so reworded copies cannot fill the 20-rule cap. Rules skipped because 20 are already active are counted as `write_filter_dropped_rules` in the results.
 - `extra_from_wrong_rule` is shown as `n/a` for the `full_context` and `naive_rag` baselines: they recall only the log, so the planted rule never reaches their prompt.
 - For configs with `reflexion`, the results say that corrections are counted after an oracle-guided retry. Compare memory methods on `first_attempt_failures`.
 - The LLM cache key is (model, messages), without the endpoint. Changing `OPENAI_BASE_URL` while keeping the same model name replays cached replies.

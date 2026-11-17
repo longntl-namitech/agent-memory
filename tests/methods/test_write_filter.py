@@ -1,4 +1,6 @@
 import json
+
+import pytest
 from datetime import datetime
 
 from agent_memory.core.layout import MAX_RULES, Entry, Store
@@ -125,7 +127,36 @@ def test_rule_only_from_correction(tmp_path):
     assert [r.text for r in store.rules()] == ["do x"]
 
 
-import pytest
+def _c():
+    return ev("Never mention price", "correction", ["global"])
+
+
+@pytest.mark.parametrize("first", ["not json", reply(kind="fact", key="k", text="a fact")])
+def test_non_rule_first_outcome_stays_eligible(tmp_path, first):
+    store, w = Store(tmp_path), WriteFilter()
+    llm = StubLLM(first, reply(kind="rule", text="Never mention price"), reply(kind="rule", text="other"))
+    w.write(_c(), store, NOW, llm)
+    w.write(_c(), store, NOW, llm)
+    assert len(store.rules()) == 1 and len(llm.prompts) == 2
+    assert w.write(_c(), store, NOW, llm) == [] and len(llm.prompts) == 2  # rule exists: no third call
+
+
+def test_duplicate_of_active_rule_marks_seen(tmp_path):
+    store, w = Store(tmp_path), WriteFilter()
+    store.add(Entry("rule-0", "rule", None, [], "never mention price", 5, NOW, NOW, None, "active"))
+    llm = StubLLM(reply(kind="rule", text="Never mention price"), reply(kind="rule", text="x"))
+    assert w.write(_c(), store, NOW, llm) == [] and w.write(_c(), store, NOW, llm) == []
+    assert len(llm.prompts) == 1
+
+
+def test_dropped_at_cap_marks_seen(tmp_path):
+    store, w = Store(tmp_path), WriteFilter()
+    for i in range(MAX_RULES):
+        store.add(Entry(f"rule-{i}", "rule", None, [], f"rule {i}", 5, NOW, NOW, None, "active"))
+    llm = StubLLM(reply(kind="rule", text="brand new"), reply(kind="rule", text="x"))
+    w.write(_c(), store, NOW, llm)
+    assert w.write(_c(), store, NOW, llm) == [] and len(llm.prompts) == 1 and w.dropped_rules == 1
+
 
 
 @pytest.mark.parametrize("raw,kind,imp", [
