@@ -78,12 +78,37 @@ def test_is_live_failure_classification():
 
 def test_redact_removes_key():
     key = "sk-test-123456789"
-    out = redact(f"fail {key} Bearer abcdef.123456 enc x", [key, "", "a/b"])
+    out = redact(f"fail {key} Bearer abcdef.123456 x", [key, ""])
     assert "123456789" not in out and "abcdef" not in out
     assert redact("plain", [key]) == "plain"
     from urllib.parse import quote
 
-    assert "a%2Fb" not in redact(quote("a/b", safe=""), ["a/b"])
+    secret = "pa/ss+word"
+    text = quote(secret, safe="")
+    inp = f"url?k={text}"
+    assert text != secret and text in inp  # the encoded form really appears in the input
+    out = redact(inp, [secret])
+    assert text not in out and "[redacted]" in out
+
+
+def test_redact_longest_secret_first():
+    out = redact("x abcdef y", ["abc", "abcdef"])
+    assert "def" not in out and out == "x [redacted] y"
+
+
+def test_redact_bearer_case_insensitive_and_base64():
+    for word in ("bearer", "BEARER"):
+        out = redact(f"h: {word} abcDEF123+/==xyz end", [])
+        assert "abcDEF" not in out and "xyz" not in out
+
+
+def test_redact_plus_form():
+    from urllib.parse import quote_plus
+
+    secret = "my secret key"
+    text = quote_plus(secret)
+    assert "+" in text and text in f"q={text}"
+    assert text not in redact(f"q={text}", [secret])
 
 
 def test_replay_embedder_miss_raises(tmp_path):

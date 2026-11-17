@@ -2,7 +2,7 @@
 
 import re
 from typing import Literal
-from urllib.parse import quote
+from urllib.parse import quote, quote_plus
 
 from agent_memory.core.embed import OpenAICompatEmbedder
 from agent_memory.core.llm import BudgetExceeded, LLMClient, TokenBudget
@@ -51,11 +51,17 @@ def is_live_failure(exc: BaseException) -> bool:
     return isinstance(exc, openai.APIStatusError) and exc.status_code >= 500
 
 
-_PATTERNS = re.compile(r"sk-[A-Za-z0-9_\-]{8,}|Bearer [A-Za-z0-9._\-]{8,}")
+_SK = re.compile(r"sk-[A-Za-z0-9_\-]{8,}")
+_BEARER = re.compile(r"Bearer [A-Za-z0-9._\-/+=]{8,}", re.I)
 
 
 def redact(text: str, secrets: list[str]) -> str:
-    for s in secrets:
-        if s:
-            text = text.replace(s, "[redacted]").replace(quote(s, safe=""), "[redacted]")
-    return _PATTERNS.sub("[redacted]", text)
+    """Mask secrets (longest first, plain and URL-encoded forms) and key-like tokens.
+
+    Secrets shorter than 4 characters are ignored by design: masking a 1 to 3
+    character secret would destroy the text.
+    """
+    for s in sorted({s for s in secrets if len(s) >= 4}, key=len, reverse=True):
+        for form in (s, quote(s, safe=""), quote_plus(s)):
+            text = text.replace(form, "[redacted]")
+    return _BEARER.sub("[redacted]", _SK.sub("[redacted]", text))
