@@ -72,7 +72,12 @@ class Memory(Protocol):
 
 
 class Agent(Protocol):
+    """The simulation drives an agent through these four calls. The last three return tokens spent."""
+
     def run_task(self, task: Task, now: datetime) -> AgentResult: ...
+    def receive_correction(self, text: str, now: datetime) -> int: ...
+    def end_task(self, task: Task, result: AgentResult, now: datetime) -> int: ...
+    def reflect(self, now: datetime) -> int: ...
 
 
 @dataclass
@@ -107,7 +112,7 @@ Check = Callable[[Task, str], str | None]  # returns the failed check's name, or
 
 
 class MemoryAgent(Agent):
-    """Recall, answer, and on a failed check run each retry stage once. The full loop lands in T9.
+    """Recall, answer, and on a failed check run each retry stage once; `end_task` then writes and forgets.
 
     Retry notes go through memory.write, so the configured write stage handles them (a filter may drop them).
     `tokens` is the budget.used delta over the whole task, so cache hits cost 0 and memory-internal calls count.
@@ -138,3 +143,19 @@ class MemoryAgent(Agent):
             failed = self.check(task, output)
         return AgentResult(output, first, n, self.llm.budget.used - before, failed)
 
+    def _spent(self, fn: Callable[[], None]) -> int:
+        before = self.llm.budget.used
+        fn()
+        return self.llm.budget.used - before
+
+    def receive_correction(self, text: str, now: datetime) -> int:
+        # Corrections apply to every email, so they carry the `global` tag.
+        return self._spent(lambda: self.memory.write(Event("correction", text, ["global"], "user"), now))
+
+    def end_task(self, task: Task, result: AgentResult, now: datetime) -> int:
+        text = json.dumps({"lead": task.lead, "email": result.output}, ensure_ascii=False)
+        return self._spent(lambda: (self.memory.write(Event("result", text, task.tags, "task"), now),
+                                    self.memory.forget(now)))
+
+    def reflect(self, now: datetime) -> int:
+        return self._spent(lambda: self.memory.reflect(now))

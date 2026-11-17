@@ -7,7 +7,7 @@ from typing import Literal
 
 MAX_RULES = 20
 _KINDS = ("rule", "fact", "log")
-_TIME_FIELDS = ("created_at", "last_used_at", "expires_at")
+_TIME_FIELDS = ("created_at", "last_used_at", "expires_at", "archived_at")
 
 
 class RulesFull(Exception):
@@ -26,6 +26,7 @@ class Entry:
     last_used_at: datetime
     expires_at: datetime | None
     status: Literal["active", "archived"]
+    archived_at: datetime | None = None  # lets `review diff` rebuild RULES at a past time
 
 
 def slug(key: str) -> str:
@@ -42,7 +43,7 @@ def _dump(e: Entry) -> str:
 def _load(line: str) -> Entry:
     d = json.loads(line)
     for f in _TIME_FIELDS:
-        d[f] = datetime.fromisoformat(d[f]) if d[f] else None
+        d[f] = datetime.fromisoformat(d[f]) if d.get(f) else None  # files from before archived_at lack it
     return Entry(**d)
 
 
@@ -99,11 +100,15 @@ class Store:
     def log(self) -> list[Entry]:
         return self._active("log")
 
-    def archive(self, id: str) -> None:
+    def all_rules(self) -> list[Entry]:
+        """Active and archived rules, for rebuilding RULES at a past time."""
+        return list(self._entries["rule"])
+
+    def archive(self, id: str, now: datetime | None = None) -> None:
         for es in self._entries.values():
             for e in es:
                 if e.id == id:
-                    e.status = "archived"
+                    e.status, e.archived_at = "archived", now
         self._save()
 
     def render_markdown(self) -> str:
