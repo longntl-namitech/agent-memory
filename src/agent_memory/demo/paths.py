@@ -13,6 +13,9 @@ def _same(a: Path, b: Path) -> bool:
 
 
 def _is_unsafe(root: Path) -> bool:
+    # repo subdirectories (src, .git, ...) are unsafe too, except the demo dir itself
+    if root.is_relative_to(REPO_ROOT) and not root.is_relative_to(DEFAULT_ROOT):
+        return True
     # unsafe if root is, or contains, the repo, the home dir or the cwd ("/" contains all)
     for protected in (REPO_ROOT, Path.home().resolve(), Path.cwd().resolve()):
         if any(_same(root, p) for p in (protected, *protected.parents)):
@@ -48,6 +51,9 @@ class DemoPaths:
             d.mkdir(parents=True, exist_ok=True)
 
     def wipe(self) -> None:
+        self.root = self.root.resolve()
+        if _is_unsafe(self.root):
+            raise ValueError(f"refusing unsafe demo root: {self.root}")
         if not self.root.is_dir():
             return
         for child in self.root.iterdir():

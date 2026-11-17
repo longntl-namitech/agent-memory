@@ -88,3 +88,43 @@ def test_wipe_unlinks_symlink_not_target(tmp_path):
     p.wipe()
     assert not (p.root / "link").exists() and not (p.root / "link").is_symlink()
     assert (outside / "keep.txt").read_text() == "k"
+
+
+def test_refuses_repo_subdirectories():
+    for sub in ("src", ".git", "tests"):
+        with pytest.raises(ValueError):
+            DemoPaths(REPO_ROOT / sub)
+    DemoPaths(DEFAULT_ROOT)
+    DemoPaths(DEFAULT_ROOT / "x")
+
+
+def test_symlinked_root_to_repo_refused(tmp_path):
+    link = tmp_path / "link"
+    link.symlink_to(REPO_ROOT, target_is_directory=True)
+    with pytest.raises(ValueError):
+        DemoPaths(link)
+
+
+def test_wipe_rechecks_after_cwd_change(tmp_path, monkeypatch):
+    root = tmp_path / "root"
+    root.mkdir()
+    (root / "f.txt").write_text("x")
+    p = DemoPaths(root)
+    monkeypatch.chdir(root)
+    with pytest.raises(ValueError):
+        p.wipe()
+    assert (root / "f.txt").exists()
+
+
+def test_wipe_rechecks_after_symlink_swap(tmp_path, monkeypatch):
+    # stand-in repo inside tmp_path so nothing real can be deleted if the guard fails
+    fake_repo = tmp_path / "fakerepo"
+    fake_repo.mkdir()
+    (fake_repo / "keep.txt").write_text("k")
+    monkeypatch.setattr("agent_memory.demo.paths.REPO_ROOT", fake_repo.resolve())
+    root = tmp_path / "root"
+    p = DemoPaths(root)
+    root.symlink_to(fake_repo, target_is_directory=True)
+    with pytest.raises(ValueError):
+        p.wipe()
+    assert (fake_repo / "keep.txt").exists()
