@@ -7,3 +7,6 @@ from agent_memory.methods.write_raw import stage as _write_raw  # noqa: F401
 from agent_memory.methods import coala_stores, pool_route  # noqa: F401
 from agent_memory.methods.coala_stores import stage as _coala_stores  # noqa: F401
 from agent_memory.methods.pool_route import stage as _pool_route  # noqa: F401
+from agent_memory.methods import rules_only, tag_recall  # noqa: F401
+from agent_memory.methods.rules_only import stage as _rules_only  # noqa: F401
+from agent_memory.methods.tag_recall import stage as _tag_recall  # noqa: F401

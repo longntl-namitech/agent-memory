@@ -115,6 +115,14 @@ class Store:
                     e.status, e.archived_at = "archived", now
         self._save()
 
+    def touch(self, ids: list[str], now: datetime) -> None:
+        """Mark entries as used (by recall); resets the clock that `archive` ages from."""
+        for es in self._entries.values():
+            for e in es:
+                if e.id in ids:
+                    e.last_used_at = now
+        self._save()
+
     def render_markdown(self) -> str:
         def sec(title: str, es: list[Entry]) -> str:
             lines = [f"- {e.key + ': ' if e.key else ''}{e.text}" for e in es]

@@ -113,3 +113,13 @@ def test_all_log_includes_archived(tmp_path):
     s.archive("l1", T)
     assert [e.id for e in s.all_log()] == ["l1", "l2"]
     assert [e.id for e in s.log()] == ["l2"]
+
+
+def test_touch_sets_last_used_and_persists(tmp_path):
+    s = Store(tmp_path)
+    s.add(mk("a", key="k"))
+    s.add(mk("b", key="k2"))
+    later = datetime(2026, 2, 1)
+    s.touch(["a"], later)
+    got = {e.id: e.last_used_at for e in Store(tmp_path).facts()}
+    assert got == {"a": later, "b": T}
