@@ -235,6 +235,15 @@ def test_unset_key_env_is_a_failed_attempt(home, tmp_path):
     assert r.failed_check == "hermes_failed" and r.tokens == 0 and agent.failed_attempts == 1
 
 
+def test_timed_out_call_still_records_its_usage(home, tmp_path):
+    agent = make(home, tmp_path, FAKE_HERMES_SLEEP_AFTER_USAGE="5")
+    agent.timeout = 1
+    with pytest.raises(HermesError, match="timed out"):
+        with agent:
+            agent.run_task(TASK, NOW)
+    assert agent.tokens_used == 1250  # the spend counts toward the budget before the raise
+
+
 def test_missing_usage_file_raises(home, tmp_path):
     with pytest.raises(HermesError, match="usage"):
         with make(home, tmp_path, FAKE_HERMES_NO_USAGE="1") as agent:

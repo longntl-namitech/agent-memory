@@ -16,6 +16,7 @@
 #   FAKE_HERMES_MEMORY_ADD      the model "calls memory add": append an entry to MEMORY.md
 #   FAKE_HERMES_PATCH_OLD/NEW   the model "calls memory patch": replace text in MEMORY.md
 #   FAKE_HERMES_SLEEP           a -z run hangs this many seconds (timeout tests)
+#   FAKE_HERMES_SLEEP_AFTER_USAGE   a -z run hangs this many seconds after writing its usage file
 #   FAKE_HERMES_GATEWAY_EXIT / FAKE_HERMES_GATEWAY_SLEEP   exit code of / hang in `gateway stop`
 set -u
 
@@ -97,6 +98,10 @@ if [ -n "$usage" ] && [ -z "${FAKE_HERMES_NO_USAGE:-}" ]; then
     printf '{"input_tokens": %d, "output_tokens": %d, "total_tokens": %d, "api_calls": 1, "completed": true, "failed": false, "auxiliary": {"total_tokens": %d, "api_calls": 1}, "total_including_auxiliary": {"total_tokens": %d, "api_calls": 2}}\n' \
       "$in" "$out" $((in + out)) "$aux" $((in + out + aux)) > "$usage"
   fi
+fi
+
+if [ -n "${FAKE_HERMES_SLEEP_AFTER_USAGE:-}" ]; then
+  exec sleep "$FAKE_HERMES_SLEEP_AFTER_USAGE"
 fi
 
 code=${FAKE_HERMES_EXIT:-0}

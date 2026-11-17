@@ -213,6 +213,14 @@ class HermesAgent(Agent):
             total = (u.get("input_tokens") or 0) + (u.get("output_tokens") or 0)
         return int(total)
 
+    def _record(self, usage: Path) -> None:
+        """Count what a call that is about to raise already spent, if its usage file is there and readable."""
+        if usage.exists():
+            try:
+                self.budget.used += self._tokens(usage)  # no spend(): the caller raises anyway
+            except ValueError:
+                pass  # half-written by a killed call
+
     def run_task(self, task: Task, now: datetime) -> AgentResult:
         self.start()
         usage = self.profile_root / "usage.json"
@@ -220,12 +228,15 @@ class HermesAgent(Agent):
         # no terminal, skills or file: skills and file writes would outlive the wipe, and file can read the repo
         # (corrections, blocklist, earlier results); an email needs none of them
         toolsets = "memory,todo" if self.memory_enabled else "todo"
-        p = self._call(["-z", self._prompt(task), "--usage-file", str(usage),
-                        "--provider", "custom", "-m", self.model, "-t", toolsets], self.workdir)
+        try:
+            p = self._call(["-z", self._prompt(task), "--usage-file", str(usage),
+                            "--provider", "custom", "-m", self.model, "-t", toolsets], self.workdir)
+        except HermesError:
+            self._record(usage)
+            raise
         self._pending = []
         if p.returncode not in (0, 1, 2):  # 130 interrupted, or a crash
-            if usage.exists():
-                self.budget.used += self._tokens(usage)  # record the spend; the raise below ends the task
+            self._record(usage)
             raise HermesError(f"hermes -z exited {p.returncode}: {p.stderr.strip()[-500:]}")
         tokens = self._tokens(usage)
         self.budget.spend(tokens)  # raises BudgetExceeded once the run is over its cap
