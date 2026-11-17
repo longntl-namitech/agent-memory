@@ -19,13 +19,16 @@ control, built-in stores off). Checked against Hermes v0.23.2, see `docs/hermes-
   `state.db*`, `checkpoints/`, `logs/`, `pending_messages/`, `response_store.db*`, plus the adapter's
   `workspace/` (the cwd of each call) and `usage.json` (paths checked in `docs/hermes-flags.md`). The runtime
   (`installs/`, `cache/` and the rest) is kept. Because the reset runs at start, a run killed before `close()`
-  does not leak its memory into the next run.
+  does not leak its memory into the next run. Other stores that could hold content (`cron/`, `kanban.db`,
+  `projects.db`, `plans/`, `tmp/`) are not wiped, because the toolsets passed (`memory`, `file`, `todo`) do not
+  reach them.
 - `close()` runs `hermes gateway stop` under the same `HERMES_HOME` (a call may auto-start a background gateway;
   a failure or a timeout of the stop is ignored), then wipes the run state again: no memory or session content
   is left behind after a success, a failure or a crash. The runtime stays.
 - One fresh session per task:
-  `HERMES_HOME=<data root> hermes -z PROMPT --usage-file PATH --provider custom -m MODEL -t memory,file,skills,todo`
-  (`-t file,skills,todo` without memory). The prompt is the lab's own task text (`TASK_PROMPT` plus the lead
+  `HERMES_HOME=<data root> hermes -z PROMPT --usage-file PATH --provider custom -m MODEL -t memory,file,todo`
+  (`-t file,todo` without memory). No `skills` toolset: emails need no skills, and skills the model writes would
+  carry over between runs (the data root keeps `skills/`). The prompt is the lab's own task text (`TASK_PROMPT` plus the lead
   JSON, shared with MemoryAgent), then the corrections received since the last task as user text. Memory persists
   across the tasks of a run only through `<data root>/memories/MEMORY.md`.
 - Exit codes: 0 is the email. 2 (failed or partial) and 1 (no text) are failed attempts: `output` is `""`,
@@ -79,6 +82,8 @@ per-config default; raise it for Hermes with `--per-config-cap`.
 Still unverified:
 
 - The real exit codes 1 (empty reply) and 130 (interrupt), and the code for a turn-cap stop.
+- That wiping `logs/`, `sessions/` and `state.db` between runs causes no re-bootstrap of the runtime (to be
+  verified by the real pilot).
 - That stdout of `hermes -z` is the email text only.
 - That `memory_enabled: false` removes the memory tool and block, and that `-t` leaves no terminal access.
 - That a `MEMORY.md` written by the adapter (entries joined by `\n§\n`, nothing else) is read by Hermes as is.

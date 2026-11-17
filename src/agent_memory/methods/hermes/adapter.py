@@ -211,7 +211,8 @@ class HermesAgent(Agent):
         self.start()
         usage = self.profile_root / "usage.json"
         usage.unlink(missing_ok=True)
-        toolsets = "memory,file,skills,todo" if self.memory_enabled else "file,skills,todo"  # never terminal
+        # never terminal; no skills: emails need none, and skills the model writes would carry over between runs
+        toolsets = "memory,file,todo" if self.memory_enabled else "file,todo"
         p = self._call(["-z", self._prompt(task), "--usage-file", str(usage),
                         "--provider", "custom", "-m", self.model, "-t", toolsets], self.workdir)
         self._pending = []

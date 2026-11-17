@@ -68,7 +68,7 @@ def test_command_flags(home, tmp_path):
     assert argv[argv.index("--provider") + 1] == "custom"
     assert argv[argv.index("-m") + 1] == "gpt-5.4-nano"
     toolsets = argv[argv.index("-t") + 1].split(",")
-    assert "memory" in toolsets and "terminal" not in toolsets
+    assert toolsets == ["memory", "file", "todo"]  # no skills (they would carry over between runs), no terminal
     every = [a for c in calls(tmp_path) for a in c]
     for banned in ("-p", "--profile", "profile", "--ignore-rules", "--ignore-user-config"):
         assert banned not in every
@@ -351,7 +351,7 @@ def test_no_memory_config_disables_stores(home, tmp_path):
         config = (home / "config.yaml").read_text()
     assert "memory_enabled: false" in config and "user_profile_enabled: false" in config
     toolsets = runs(tmp_path)[0][runs(tmp_path)[0].index("-t") + 1].split(",")
-    assert "memory" not in toolsets and "terminal" not in toolsets
+    assert toolsets == ["file", "todo"] and not {"memory", "skills", "terminal"} & set(toolsets)
 
 
 def test_memory_config_enables_stores(home, tmp_path):
