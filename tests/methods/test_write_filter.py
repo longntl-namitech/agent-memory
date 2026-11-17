@@ -4,7 +4,6 @@ from datetime import datetime
 from agent_memory.core.layout import MAX_RULES, Entry, Store
 from agent_memory.core.llm import Completion
 from agent_memory.core.memory import Event
-from agent_memory.methods.write_filter import stage as wf
 from agent_memory.methods.write_filter.stage import WriteFilter
 from agent_memory.methods.write_raw.stage import WriteRaw
 
@@ -72,15 +71,44 @@ def test_full_rules_skipped_without_raising(tmp_path):
 
 
 def test_bad_json_or_kind_falls_back_to_log(tmp_path):
-    store, before = Store(tmp_path), wf.FALLBACKS
+    store, w = Store(tmp_path), WriteFilter()
     llm = StubLLM("not json", reply(kind="bogus"))
-    WriteFilter().write(ev("one"), store, NOW, llm)
-    WriteFilter().write(ev("two"), store, NOW, llm)
+    w.write(ev("one"), store, NOW, llm)
+    w.write(ev("two"), store, NOW, llm)
     assert [e.text for e in store.log()] == ["one", "two"]
-    assert wf.FALLBACKS == before + 2
+    assert w.fallbacks == 2 and WriteFilter().fallbacks == 0
 
 
 def test_write_raw_makes_one_log_entry_no_llm(tmp_path):
     store = Store(tmp_path)
     out = WriteRaw().write(ev("hello"), store, NOW, None)
     assert [e.text for e in store.log()] == ["hello"] and len(out) == 1
+
+
+def test_model_tags_are_ignored(tmp_path):
+    store = Store(tmp_path)
+    WriteFilter().write(ev(), store, NOW, StubLLM(reply(tags=["invented", "acme-2"])))
+    assert store.log()[0].tags == ["acme"]
+
+
+def test_rule_only_from_correction(tmp_path):
+    store = Store(tmp_path)
+    WriteFilter().write(ev(kind="result"), store, NOW, StubLLM(reply(kind="rule", text="a lesson")))
+    assert store.rules() == [] and [e.text for e in store.log()] == ["a lesson"]
+    WriteFilter().write(ev(kind="correction"), store, NOW, StubLLM(reply(kind="rule", text="do x")))
+    assert [r.text for r in store.rules()] == ["do x"]
+
+
+import pytest
+
+
+@pytest.mark.parametrize("raw,kind,imp", [
+    ('```json\n{"kind": "log", "text": "t", "importance": 3}\n```', "log", 3),
+    ('Sure! {"kind": "log", "text": "t", "importance": 3} done', "log", 3),
+    ('{"kind": "log", "text": "t", "importance": "7"}', "log", 7),
+    ('{"kind": "Rule", "text": "t"}', "rule", 5),
+    ('{"kind": " FACT ", "key": "k", "text": "t", "importance": "high"}', "fact", 5),
+])
+def test_parser_tolerates(raw, kind, imp):
+    d = WriteFilter._parse(raw)
+    assert d["kind"] == kind and d["importance"] == imp
