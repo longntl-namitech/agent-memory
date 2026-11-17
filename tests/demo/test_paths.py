@@ -1,8 +1,9 @@
+import os
 from pathlib import Path
 
 import pytest
 
-from agent_memory.demo.paths import DEFAULT_ROOT, DemoPaths
+from agent_memory.demo.paths import DEFAULT_ROOT, REPO_ROOT, DemoPaths
 
 
 def test_ensure_creates_layout(tmp_path):
@@ -41,3 +42,49 @@ def test_wipe_when_root_missing_is_noop(tmp_path):
 def test_default_root_is_dot_demo_under_repo():
     assert DEFAULT_ROOT.name == ".demo"
     assert (DEFAULT_ROOT.parent / "pyproject.toml").is_file()
+
+
+def test_refuses_root_containing_repo():
+    with pytest.raises(ValueError):
+        DemoPaths(REPO_ROOT.parent)
+    works = Path.home() / "Works"
+    if works.exists():
+        with pytest.raises(ValueError):
+            DemoPaths(works)
+
+
+def test_refuses_root_containing_cwd(tmp_path, monkeypatch):
+    deep = tmp_path / "a" / "b"
+    deep.mkdir(parents=True)
+    monkeypatch.chdir(deep)
+    with pytest.raises(ValueError):
+        DemoPaths(tmp_path)
+
+
+def test_refuses_home_and_ancestor_case_insensitively():
+    for real in (Path.home().resolve(), Path.home().resolve().parent):
+        swapped = Path(str(real).swapcase())
+        if not (swapped.exists() and os.path.samefile(swapped, real)):
+            pytest.skip("case-sensitive filesystem")
+        with pytest.raises(ValueError):
+            DemoPaths(swapped)
+
+
+def test_store_rejects_traversal_and_absolute(tmp_path):
+    p = DemoPaths(tmp_path / "demo")
+    for bad in ("../x", "/etc", "", ".", "..", "a/b"):
+        with pytest.raises(ValueError):
+            p.store(bad)
+    assert p.store("full") == p.root / "stores" / "full"
+
+
+def test_wipe_unlinks_symlink_not_target(tmp_path):
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "keep.txt").write_text("k")
+    p = DemoPaths(tmp_path / "demo")
+    p.ensure()
+    (p.root / "link").symlink_to(outside, target_is_directory=True)
+    p.wipe()
+    assert not (p.root / "link").exists() and not (p.root / "link").is_symlink()
+    assert (outside / "keep.txt").read_text() == "k"
