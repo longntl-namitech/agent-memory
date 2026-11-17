@@ -2,6 +2,10 @@
 
 ## v0.1.0 - 2026-11-17
 
+### Fixed
+
+- LongMemEval download: verify the byte count against the server size, retry a truncated fetch up to 3 times, write a `<name>.size` sidecar, re-fetch an existing truncated file, and make `load_selected` raise a clear `ValueError` on a corrupt cached file.
+
 ### Added
 
 - Repo scaffold.

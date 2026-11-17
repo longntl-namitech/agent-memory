@@ -77,3 +77,83 @@ def test_download_idempotent_with_injected_fetch(tmp_path):
     lme.download(cache, fetch=fetch)
     assert len(calls) == 2
     assert not list(cache.glob("*.tmp"))
+
+
+def _good():
+    return FIXTURE.read_bytes()
+
+
+def test_truncated_fetch_then_good_retry(tmp_path):
+    calls = []
+
+    def fetch(url, dest):
+        calls.append(url)
+        dest.write_bytes(_good()[: len(_good()) // 2] if len(calls) == 1 else _good())
+
+    sizes = {n: len(_good()) for n in lme.FILES}
+    cache = tmp_path / "c"
+    p = lme.download(cache, fetch=fetch, expected_sizes=sizes)
+    assert p.read_bytes() == _good()
+    assert len(calls) == 3  # first file twice, second once
+    assert (cache / (lme.FILES[0] + ".size")).read_text() == str(len(_good()))
+    assert not list(cache.glob("*.tmp"))
+
+
+def test_always_truncated_raises_after_3_attempts(tmp_path):
+    calls = []
+
+    def fetch(url, dest):
+        calls.append(url)
+        dest.write_bytes(_good()[:10])
+
+    cache = tmp_path / "c"
+    with pytest.raises(RuntimeError, match="download truncated: got 10 of"):
+        lme.download(cache, fetch=fetch, expected_sizes={n: len(_good()) for n in lme.FILES})
+    assert len(calls) == 3
+    assert not list(cache.glob("*.tmp")) and not (cache / lme.FILES[0]).exists()
+
+
+def test_existing_truncated_file_without_sidecar_is_refetched(tmp_path):
+    cache = tmp_path / "c"
+    cache.mkdir()
+    (cache / lme.FILES[0]).write_bytes(_good()[:50])
+    (cache / lme.FILES[1]).write_bytes(_good())  # healthy: ends with `]`
+    calls = []
+
+    def fetch(url, dest):
+        calls.append(url)
+        dest.write_bytes(_good())
+
+    lme.download(cache, fetch=fetch)
+    assert len(calls) == 1 and lme.FILES[0] in calls[0]
+    assert (cache / lme.FILES[0]).read_bytes() == _good()
+
+
+def test_file_with_matching_sidecar_is_skipped_and_mismatch_refetched(tmp_path):
+    cache = tmp_path / "c"
+    cache.mkdir()
+    for n in lme.FILES:
+        (cache / n).write_bytes(b"not json at all")  # sidecar wins over the `]` check
+        (cache / (n + ".size")).write_text(str(len(b"not json at all")))
+    calls = []
+
+    def fetch(url, dest):
+        calls.append(url)
+        dest.write_bytes(_good())
+
+    lme.download(cache, fetch=fetch)
+    assert calls == []
+    assert (cache / lme.FILES[0]).read_bytes() == b"not json at all"
+    (cache / (lme.FILES[0] + ".size")).write_text("999999")
+    lme.download(cache, fetch=fetch)
+    assert len(calls) == 1
+
+
+def test_load_selected_truncated_file_raises_and_keeps_file(tmp_path):
+    cache = tmp_path / "c"
+    cache.mkdir()
+    src = cache / lme.FILES[0]
+    src.write_bytes(_good()[:-40])
+    with pytest.raises(ValueError, match=r"longmemeval_s_cleaned\.json.*truncated or corrupt.*--download"):
+        lme.load_selected(cache)
+    assert src.exists()

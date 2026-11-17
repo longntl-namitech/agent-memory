@@ -15,9 +15,15 @@ Hugging Face dataset card: the question_type names above, the `_abs` rule (30 of
 the other types' rows) and the file names. Not fetched: the `resolve/main` URL pattern. An unknown
 question_type raises ValueError.
 
-Memory: UNVERIFIED estimates, re-check at the first real download (file size was not checked): s_cleaned
-is about 265 MB and json-loading it needs roughly 1-3 GB RAM. Either way, the runner should load it
-once, select, and write the selected 50 to a small JSON in `.cache/`.
+Sizes, measured on 2026-11-17: s_cleaned is 277,383,467 bytes, oracle is 15,388,478 bytes. Json-loading
+s_cleaned needs roughly 1-3 GB RAM (UNVERIFIED). The runner loads it once, selects, and writes the selected
+50 to a small JSON in `.cache/`.
+
+Download integrity: the first real download stopped at 226,889,973 bytes (JSON cut mid-string). `_stream`
+compares the bytes written with the server size and `download` retries a short fetch up to 3 times, never
+promoting an incomplete file. Each good file gets a `<name>.size` sidecar with the server byte count; an
+existing file whose size differs from its sidecar (or, with no sidecar, whose last non-whitespace byte is
+not `]`) is fetched again.
 
 Split sizes of the cleaned split must be checked at download time (spec caveat): `split_sizes`.
 """
@@ -53,29 +59,69 @@ def ability(row: dict) -> str:
         ) from None
 
 
-def _stream(url: str, dest: Path) -> None:
+def _stream(url: str, dest: Path) -> int | None:
+    """Write `url` to `dest`; return the server size (None if no size header) and raise if fewer bytes arrived.
+
+    The size comes from `Content-Length` of the final response (urllib follows the CDN redirect), else
+    `X-Linked-Size`. With neither header the truncation check is skipped.
+    """
     with urllib.request.urlopen(url) as resp, open(dest, "wb") as out:
+        size = resp.headers.get("Content-Length") or resp.headers.get("X-Linked-Size")
+        size = int(size) if size and size.isdigit() else None
+        got = 0
         while chunk := resp.read(1 << 20):  # chunked: files are hundreds of MB
             out.write(chunk)
+            got += len(chunk)
+    if size is not None and got < size:
+        raise RuntimeError(f"download truncated: got {got} of {size} bytes for {Path(url).name}")
+    return size
 
 
-def download(cache: Path, fetch=None) -> Path:
-    """Fetch the two files into `cache` (skipping existing ones); return the s_cleaned path."""
+def _is_complete(path: Path) -> bool:
+    sidecar = path.with_name(path.name + ".size")
+    if sidecar.exists():
+        return sidecar.read_text().strip() == str(path.stat().st_size)
+    with open(path, "rb") as f:  # no sidecar: cheap check, a JSON array ends with `]`
+        f.seek(max(0, path.stat().st_size - 4096))
+        return f.read().rstrip()[-1:] == b"]"
+
+
+def download(cache: Path, fetch=None, expected_sizes: dict[str, int] | None = None, attempts: int = 3) -> Path:
+    """Fetch the two files into `cache` (skipping complete ones); return the s_cleaned path.
+
+    `fetch(url, dest)` may return the expected size in bytes (the real `_stream` does); `expected_sizes`
+    (file name -> bytes) supplies it for a fake fetch. With no size known the check is skipped. A short or
+    failed fetch is retried up to `attempts` times with a full re-fetch, then the last error is raised.
+    """
     fetch = fetch or _stream
     cache = Path(cache)
     cache.mkdir(parents=True, exist_ok=True)
     for name in FILES:
         path = cache / name
-        if path.exists():
+        if path.exists() and _is_complete(path):
             continue
-        fd, tmp = tempfile.mkstemp(dir=cache, suffix=".tmp")
-        os.close(fd)
-        try:
-            fetch(BASE_URL + name, Path(tmp))
-            os.replace(tmp, path)  # atomic: a crash never leaves a half-written file
-        finally:
-            if os.path.exists(tmp):
-                os.unlink(tmp)
+        for attempt in range(attempts):
+            fd, tmp = tempfile.mkstemp(dir=cache, suffix=".tmp")
+            os.close(fd)
+            try:
+                size = fetch(BASE_URL + name, Path(tmp))
+                size = size or (expected_sizes or {}).get(name)
+                got = os.path.getsize(tmp)
+                if size is not None and got < size:
+                    raise RuntimeError(f"download truncated: got {got} of {size} bytes for {name}")
+                os.replace(tmp, path)  # atomic: a crash never leaves a half-written file
+                sidecar = path.with_name(name + ".size")
+                if size is not None:
+                    sidecar.write_text(str(size))
+                elif sidecar.exists():
+                    sidecar.unlink()  # stale size from an older file
+                break
+            except Exception:
+                if attempt == attempts - 1:
+                    raise
+            finally:
+                if os.path.exists(tmp):
+                    os.unlink(tmp)
     return cache / FILES[0]
 
 
@@ -134,7 +180,14 @@ def load_selected(cache: Path, per_ability: int = 10, seed: int = 7, download_fn
             if download_fn is None:
                 raise FileNotFoundError(f"{src} is missing; pass --download to fetch it")
             src = download_fn(cache)
-        rows = select_subset(json.loads(Path(src).read_text(encoding="utf-8")), per_ability, seed)
+        try:
+            data = json.loads(Path(src).read_text(encoding="utf-8"))
+        except json.JSONDecodeError as e:
+            raise ValueError(
+                f"{src} is not valid JSON ({e}); it looks truncated or corrupt. Delete it and re-run "
+                "with --download to fetch it again."
+            ) from e
+        rows = select_subset(data, per_ability, seed)
         fd, tmp = tempfile.mkstemp(dir=cache, suffix=".tmp")
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             json.dump(rows, f, ensure_ascii=False)

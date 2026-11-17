@@ -154,7 +154,7 @@ For LongMemEval the full set is above 5,000,000 tokens. The rule is to run a sub
 
 ## Data and attribution
 
-- LongMemEval: [`xiaowu0162/longmemeval-cleaned`](https://huggingface.co/datasets/xiaowu0162/longmemeval-cleaned), MIT. The judge prompts are copied from the LongMemEval repo, `src/evaluation/evaluate_qa.py`. The dataset is downloaded into `.cache/` only with `--download` and is never committed.
+- LongMemEval: [`xiaowu0162/longmemeval-cleaned`](https://huggingface.co/datasets/xiaowu0162/longmemeval-cleaned), MIT. The judge prompts are copied from the LongMemEval repo, `src/evaluation/evaluate_qa.py`. The dataset is downloaded into `.cache/` only with `--download` and is never committed. Sizes (measured 2026-11-17): `longmemeval_s_cleaned.json` 277,383,467 bytes, `longmemeval_oracle.json` 15,388,478 bytes. The download is size-checked, retried up to 3 times and recorded in a `<name>.size` sidecar; a truncated cached file is fetched again.
 - LoCoMo is not used (CC BY-NC 4.0).
 - The simulation task stream, corrections and blocklist are committed in [`data/simulation/`](data/simulation).
 
