@@ -46,7 +46,8 @@ from the v0.23.2 sources: `memories/` (`tools/memory_tool.py:40`, MEMORY.md and 
 (`hermes_state.py:452`, transcripts `sessions/<id>.jsonl`), `state.db*` (`hermes_state.py:184`, the session
 database plus its `-wal` and `-shm` files), `checkpoints/` (`tools/checkpoint_manager.py:78`), `logs/`
 (`agent.log` and others), `pending_messages/` (`gateway/shutdown_flush.py:47`), `response_store.db*`
-(`gateway/platforms/api_server_response_store.py:61`), plus the adapter's own `workspace/` (the cwd of each call)
+(`gateway/platforms/api_server_response_store.py:61`), `spawn-ledger.json*` (`hermes_constants_scratch.py:252`,
+child-process ledger whose entries carry the argv, so the prompt), plus the adapter's own `workspace/` (the cwd of each call)
 and `usage.json`. The runtime (`installs/`, `cache/`, the checkout and the rest) is kept.
 
 Recommended argv now (after the first real calls): `HERMES_HOME=<data root> hermes -z PROMPT --usage-file PATH

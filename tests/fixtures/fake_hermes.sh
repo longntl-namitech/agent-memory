@@ -2,7 +2,7 @@
 # Stub of the `hermes` CLI (v0.23.2 surface) for tests: no model, no network, writes only under $HERMES_HOME.
 # It emulates a dedicated data root (HERMES_HOME, no -p): the first use "bootstraps" installs/ (the heavy runtime
 # the adapter must keep); a -z run writes run state the adapter must wipe (a session transcript, state.db and a
-# log line, all holding the prompt) and marks the background gateway as running; `gateway stop` stops it.
+# log line and spawn-ledger.json, all holding the prompt) and marks the background gateway as running; `gateway stop` stops it.
 # `--version` exits 1 ("no dependency environment") in a home without installs/; only -z bootstraps.
 # A -z run whose config.yaml names a key_env that is unset exits 2 with an all-null usage file (the real failure).
 # Behaviour comes from env vars:
@@ -67,6 +67,8 @@ mkdir -p "$HERMES_HOME/sessions" "$HERMES_HOME/logs"
 printf '{"role": "user", "content": %s}\n' "\"$prompt\"" >> "$HERMES_HOME/sessions/session_fake.jsonl"
 printf '%s\n' "$prompt" >> "$HERMES_HOME/state.db"
 printf 'turn: %s\n' "$prompt" >> "$HERMES_HOME/logs/agent.log"
+printf '[{"pid": %d, "argv": ["-z", "%s"]}]\n' $$ "$prompt" > "$HERMES_HOME/spawn-ledger.json"
+: > "$HERMES_HOME/spawn-ledger.json.lock"
 
 key_env=$(sed -n 's/^  key_env: "\(.*\)"$/\1/p' "$HERMES_HOME/config.yaml" 2>/dev/null)
 if [ -n "$key_env" ] && [ -z "${!key_env:-}" ]; then

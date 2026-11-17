@@ -30,7 +30,7 @@ REPO = Path(__file__).resolve().parents[4]  # a relative profile_root is taken f
 # Data-root entries that hold memory, conversation or session content (checked in the v0.23.2 sources, see
 # docs/hermes-flags.md); wiped at start and close. The runtime (installs/, cache/, hermes-agent/ ...) is kept.
 RUN_STATE = ("memories", "sessions", "state.db*", "checkpoints", "logs", "pending_messages", "response_store.db*",
-             "workspace", "usage.json")
+             "workspace", "usage.json", "spawn-ledger.json*")  # the ledger keeps each call's argv, prompt included
 _EPOCH = datetime(1970, 1, 1)  # MEMORY.md keeps no timestamps; the adapter never reads the clock
 
 

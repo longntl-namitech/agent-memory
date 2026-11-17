@@ -53,7 +53,8 @@ def runs(tmp_path) -> list[list[str]]:
 
 
 RUN_STATE = ["memories", "sessions", "state.db", "state.db-wal", "state.db-shm", "logs", "checkpoints",
-             "pending_messages", "response_store.db", "workspace", "usage.json"]
+             "pending_messages", "response_store.db", "workspace", "usage.json", "spawn-ledger.json",
+             "spawn-ledger.json.lock"]
 
 
 def run_state(home) -> list[str]:
@@ -119,6 +120,7 @@ def test_reset_wipes_memory_between_runs_and_keeps_runtime(home, tmp_path):
         agent.run_task(TASK, NOW)
         assert agent.memory_entries() == ["Always sign off as Sam.", "Prices go excl. VAT."]
         assert (home / "sessions").is_dir() and (home / "state.db").exists()
+        assert "Acme" in (home / "spawn-ledger.json").read_text()  # the argv, prompt included
     assert run_state(home) == []
     (home / "cache").mkdir()
     (home / "cache" / "keep.bin").write_text("runtime")
@@ -126,10 +128,13 @@ def test_reset_wipes_memory_between_runs_and_keeps_runtime(home, tmp_path):
     (home / "memories").mkdir()
     (home / "memories" / "MEMORY.md").write_text("stale entry from a killed run")
     (home / "state.db-wal").write_text("stale")
+    (home / "spawn-ledger.json").write_text('[{"argv": ["-z", "stale prompt about Acme"]}]')
+    (home / "spawn-ledger.json.lock").write_text("")
     with make(home, tmp_path) as agent:
         assert agent.memory_entries() == [] and agent.memory_size() == 0
         agent.start()
         assert agent.memory_entries() == [] and not (home / "state.db-wal").exists()
+        assert not (home / "spawn-ledger.json").exists() and not (home / "spawn-ledger.json.lock").exists()
         agent.run_task(TASK, NOW)
         assert agent.memory_entries() == []
     assert (home / "cache" / "keep.bin").read_text() == "runtime"

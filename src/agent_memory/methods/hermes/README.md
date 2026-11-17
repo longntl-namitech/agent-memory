@@ -16,7 +16,7 @@ control, built-in stores off). Checked against Hermes v0.23.2, see `docs/hermes-
 - Reset at `start()` (the first `run_task` or `plant_rule`): wipe the run state, then write `config.yaml` (always
   overwritten): model, `provider: custom`, `base_url`, `key_env`, `agent.max_turns`, and `memory_enabled` /
   `user_profile_enabled` (both `false` for `hermes_no_memory`). The run state is `memories/`, `sessions/`,
-  `state.db*`, `checkpoints/`, `logs/`, `pending_messages/`, `response_store.db*`, plus the adapter's
+  `state.db*`, `checkpoints/`, `logs/`, `pending_messages/`, `response_store.db*`, `spawn-ledger.json*` (each call's argv, prompt included), plus the adapter's
   `workspace/` (the cwd of each call) and `usage.json` (paths checked in `docs/hermes-flags.md`). The runtime
   (`installs/`, `cache/` and the rest) is kept. Because the reset runs at start, a run killed before `close()`
   does not leak its memory into the next run. Other stores that could hold content (`cron/`, `kanban.db`,
