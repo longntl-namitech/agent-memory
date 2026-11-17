@@ -279,6 +279,17 @@ def test_hermes_estimate_only_prices_zero_and_says_pilot(monkeypatch, capsys):
     out = capsys.readouterr().out
     assert "hermes_default: 0" in out and "total: 0" in out
     assert "Hermes tokens are measured by the pilot, not estimated" in out
+    assert "690 MB" in out and "minutes" in out
+
+
+def test_hermes_run_needs_an_explicit_per_config_cap(monkeypatch, tmp_path, capsys):
+    home = hermes_run(monkeypatch, tmp_path, FAKE_HERMES_LOG=str(tmp_path / "calls.log"))
+    monkeypatch.setattr(cli, "make_llm", no_llm)
+    assert cli.main(run_args(tmp_path, "hermes_default", "--max-tokens", "500000")) == 2
+    err = capsys.readouterr().err
+    assert "--per-config-cap" in err and "100,000" in err and "194,000" in err and "Hermes only" in err
+    assert not (tmp_path / "calls.log").exists() and not home.exists()
+    assert not (tmp_path / "results").exists() and not (tmp_path / "stores").exists()
 
 
 def hermes_run(monkeypatch, tmp_path, **env):
@@ -299,7 +310,7 @@ def no_run_state(home) -> bool:
 
 def test_hermes_run_writes_result_and_leaves_no_run_state(monkeypatch, tmp_path):
     home = hermes_run(monkeypatch, tmp_path, FAKE_HERMES_MEMORY_ADD="Prices go excl. VAT.")
-    assert cli.main(run_args(tmp_path, "hermes_default", "--max-tokens", "500000")) == 0
+    assert cli.main(run_args(tmp_path, "hermes_default", "--max-tokens", "500000", "--per-config-cap", "100000")) == 0
     text = (tmp_path / "results" / "simulation_hermes_default.md").read_text()
     assert not text.startswith("PARTIAL") and "- model: gpt-5.4-nano" in text
     assert "- tokens: 50000" in text  # 40 tasks x 1,250 from the usage file
@@ -325,14 +336,14 @@ def test_hermes_planted_rule_is_reviewed_out_of_memory_md(monkeypatch, tmp_path)
         return real_reflect(self, now)
 
     monkeypatch.setattr(HermesAgent, "reflect", reflect)
-    assert cli.main(run_args(tmp_path, "hermes_default", "--max-tokens", "500000")) == 0
+    assert cli.main(run_args(tmp_path, "hermes_default", "--max-tokens", "500000", "--per-config-cap", "100000")) == 0
     assert sizes[0] == [] and sizes[1] == ["NEVER  mention PRICES in follow-up emails, let the lead ask first."]
     assert sizes[2] == [] and sizes[3] == []  # the week-3 Monday review removed the patched rule
 
 
 def test_hermes_crash_writes_partial_and_leaves_no_run_state(monkeypatch, tmp_path):
     home = hermes_run(monkeypatch, tmp_path, FAKE_HERMES_EXIT="130")
-    assert cli.main(run_args(tmp_path, "hermes_default", "--max-tokens", "500000")) == 1
+    assert cli.main(run_args(tmp_path, "hermes_default", "--max-tokens", "500000", "--per-config-cap", "100000")) == 1
     text = (tmp_path / "results" / "simulation_hermes_default.md").read_text()
     assert text.startswith("PARTIAL RESULT") and "- completed_tasks: 0" in text
     assert no_run_state(home)
@@ -340,7 +351,7 @@ def test_hermes_crash_writes_partial_and_leaves_no_run_state(monkeypatch, tmp_pa
 
 def test_hermes_failed_attempts_counted(monkeypatch, tmp_path):
     home = hermes_run(monkeypatch, tmp_path, FAKE_HERMES_EXIT="2")
-    assert cli.main(run_args(tmp_path, "hermes_no_memory", "--max-tokens", "500000")) == 0
+    assert cli.main(run_args(tmp_path, "hermes_no_memory", "--max-tokens", "500000", "--per-config-cap", "100000")) == 0
     text = (tmp_path / "results" / "simulation_hermes_no_memory.md").read_text()
     assert "- failed_attempts: 40" in text
     values = [ln.split(": ", 1)[1] for ln in text.splitlines() if "- extra_from_wrong_rule: " in ln]
@@ -350,7 +361,7 @@ def test_hermes_failed_attempts_counted(monkeypatch, tmp_path):
 
 def test_hermes_budget_from_its_own_usage(monkeypatch, tmp_path):
     home = hermes_run(monkeypatch, tmp_path, FAKE_HERMES_INPUT_TOKENS="30000")
-    code = cli.main(run_args(tmp_path, "hermes_default", "--max-tokens", "500000"))
+    code = cli.main(run_args(tmp_path, "hermes_default", "--max-tokens", "500000", "--per-config-cap", "100000"))
     assert code == 1
     text = (tmp_path / "results" / "simulation_hermes_default.md").read_text()
     # 30,250 per task: the 4th task pushes the run over the 100k cap and is reported as crashed tokens

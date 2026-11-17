@@ -29,6 +29,8 @@ CONFIGS = Path(__file__).resolve().parents[2] / "configs"
 SIM_START = datetime(2026, 1, 5)  # a Monday
 SIM_SEED = 7  # the seed tasks.jsonl was generated with
 PER_CONFIG_CAP = 100_000  # spec: each simulation config stays under 100k tokens
+HERMES_BOOTSTRAP_NOTE = ("note: the first Hermes call in a new data root bootstraps a ~690 MB runtime "
+                         "(installs Python dependencies) and can take minutes")
 CACHE_NOTE = "shared across configs, so per-config tokens depend on run order"
 LME_CACHE = Path(".cache")
 LME_PER_ABILITY = 10
@@ -257,10 +259,9 @@ def _pilot(args, parser) -> int:
         print(f"dry run, Hermes was not invoked (pass --run --max-tokens N to run)\n"
               f"config: {args.config}, tasks: first {args.tasks} of 40\n"
               f"model: {opts.get('model', 'gpt-5.4-nano')}, endpoint: {host}, key from env var: {opts.get('key_env')}\n"
-              f"data root: HERMES_HOME={opts.get('profile_root', '.hermes-lab/' + args.config)} (reused; "
-              f"its first use installs a ~690 MB runtime)\n"
+              f"data root: HERMES_HOME={opts.get('profile_root', '.hermes-lab/' + args.config)} (reused)\n"
               f"per task: {opts.get('binary', 'hermes')} -z <prompt> --usage-file <file> "
-              f"--provider custom -m <model> -t <toolsets>")
+              f"--provider custom -m <model> -t <toolsets>\n{HERMES_BOOTSTRAP_NOTE}")
         return 0
     if args.max_tokens is None:
         print("refused: --run needs --max-tokens (the pilot makes real model calls)", file=sys.stderr)
@@ -271,6 +272,7 @@ def _pilot(args, parser) -> int:
         return 2
     tasks = [Task(**json.loads(ln)) for ln in (DATA / "tasks.jsonl").read_text(encoding="utf-8").splitlines()
              if ln.strip()][:args.tasks]
+    print(HERMES_BOOTSTRAP_NOTE)
     budget = TokenBudget(args.max_tokens)
     agent = build(cfg, llm=SimpleNamespace(budget=budget), store=None, **hermes_deps())
     rows, stopped, error = [], None, None  # row: (task id, tokens, words or None, failed)
@@ -339,6 +341,8 @@ def _positive(text: str) -> int:
 
 
 def _run(args, parser) -> int:
+    explicit_cap = args.per_config_cap is not None  # Hermes runs must name their cap
+    args.per_config_cap = args.per_config_cap or PER_CONFIG_CAP
     names = [n.strip() for n in args.configs.split(",") if n.strip()]
     available = sorted(p.stem for p in CONFIGS.glob("*.toml"))
     if args.eval == "longmemeval":
@@ -361,6 +365,7 @@ def _run(args, parser) -> int:
         if any(n.startswith("hermes") for n in names):
             print("note: Hermes tokens are measured by the pilot, not estimated (priced at 0 here); "
                   "its run stops at the per-config cap using its own usage file")
+            print(HERMES_BOOTSTRAP_NOTE)
     else:
         print(LME_NOTE)
     try:
@@ -379,6 +384,13 @@ def _run(args, parser) -> int:
     # Every refusal below happens before an LLM client is built or a file is written.
     if args.max_tokens is None:
         print("refused: --no-estimate-only needs --max-tokens (the run's total token cap)", file=sys.stderr)
+        return 2
+    hermes = [n for n in names if load_config(CONFIGS / f"{n}.toml").agent == "hermes"]
+    if hermes and not explicit_cap:
+        print(f"refused: {', '.join(hermes)} needs an explicit --per-config-cap. The default {PER_CONFIG_CAP:,} "
+              "stops a Hermes run at about half its tasks; use at least the pilot's per-run figure (about 194,000 "
+              "measured, a downward-biased lower bound) plus headroom. The spec allows raising the cap for Hermes "
+              "only.", file=sys.stderr)
         return 2
     out = args.out or Path(tempfile.mkdtemp(prefix="agent-memory-"))
     for n in names:
@@ -424,9 +436,9 @@ def main(argv: list[str] | None = None) -> int:
         "and the run goes on with the next config; the run stops once the total is spent or a config "
         "crashes for any other reason. Any partial result makes the exit code 1. On longmemeval the cap is one "
         "budget shared by all configs, and the first config that hits it writes a PARTIAL result and ends the run."))
-    run.add_argument("--per-config-cap", type=_positive, default=PER_CONFIG_CAP, help=(
+    run.add_argument("--per-config-cap", type=_positive, default=None, help=(
         f"simulation: each config's own token cap (default {PER_CONFIG_CAP:,}, the spec's limit). Raising it is a "
-        "decision to take after a pilot run shows a config needs more"))
+        "decision to take after a pilot run shows a config needs more. Required (explicit) for Hermes configs"))
     run.add_argument("--questions", type=_positive, help=(
         "longmemeval: run only the first N selected questions, stratified evenly over the abilities "
         "(e.g. 8 for the subset run under 1,000,000 tokens)"))

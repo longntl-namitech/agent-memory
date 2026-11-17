@@ -53,7 +53,7 @@ def test_run_prints_table_and_extrapolation(monkeypatch, tmp_path, capsys):
     out = capsys.readouterr().out
     calls = log_calls(log)
     assert calls[-1] == ["gateway", "stop"] and not any("-p" in c or "profile" in c for c in calls)
-    assert "6,301 tokens" in out and "--per-config-cap" in out
+    assert "--per-config-cap" in out and "690 MB" in out
     assert "task, tokens, words, failed" in out and "0, 1000, 3, no" in out and "2, 1000, 3, no" in out
     assert "mean tokens per task: 1000" in out and "40,000 per run" in out
     assert "240,000" in out and "6 runs = 2 configs x 3 runs" in out and "80,000" in out
@@ -82,7 +82,7 @@ def test_dry_run_calls_nothing(monkeypatch, tmp_path, capsys):
     assert cli.main(args(tmp_path)) == 0
     out = capsys.readouterr().out
     assert "dry run" in out and "OPENAI_API_KEY" in out and "gpt-5.4-nano" in out and SECRET not in out
-    assert "HERMES_HOME=" in out and " -p " not in out
+    assert "HERMES_HOME=" in out and " -p " not in out and "690 MB" in out and "minutes" in out
     assert not log.exists() and not home.exists() and not (tmp_path / "results").exists()
 
 
