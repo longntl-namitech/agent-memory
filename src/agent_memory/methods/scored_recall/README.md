@@ -9,6 +9,8 @@ importance = entry.importance / 10
 relevance  = cosine(embed(query), embed(entry.text))
 ```
 
+The score is a sum of the three terms with weights 1/1/1 (spec: "equal weights", as in Generative Agents); this is how the "x" in "recency x importance x relevance" is read. Importance is clamped to 1-10.
+
 The query is the string values of `task.lead` plus the task tags. Facts and log lines are ranked together and the top `TOP_K` are kept. Rules are the always-loaded part: every rule the route returned is kept and is not counted against `TOP_K`. Output uses the shared `render` from `tag_recall` (rules plain, `key: text` facts, log plain). Every rendered entry is marked used via `Store.touch(ids, now)`.
 
 Constants:
@@ -17,6 +19,6 @@ Constants:
 - `TOP_K = 8` (facts and log lines, rules excluded).
 - Weights: 1, 1, 1.
 
-Embedder: pass one in (tests do), or leave `None` for the registry's no-argument build. Then it is created lazily on first use: `OpenAICompatEmbedder` (disk-cached by `core/embed.py`, cache dir `EMBEDDING_CACHE_DIR`, default `.cache/embeddings`) when `EMBEDDING_BASE_URL` and `EMBEDDING_MODEL` are set, else the offline `FastembedEmbedder`. Entry texts not yet embedded in this instance go in one batched call per recall.
+Embedder: pass one in (tests do), or leave `None` for the registry's no-argument build. Then it is created lazily on first use: `OpenAICompatEmbedder` (disk-cached by `core/embed.py`, cache dir `EMBEDDING_CACHE_DIR`, default `.cache/embeddings`) when `EMBEDDING_BASE_URL` and `EMBEDDING_MODEL` are set, else the offline `FastembedEmbedder`. Entry texts not yet embedded in this instance go in one batched call per recall together with the query, so a recall makes exactly one embed call.
 
 Works on both the simulation and LongMemEval; it is the recall for LongMemEval configs, where there are no tags for `tag_recall` to use. Time comes only from `now`.

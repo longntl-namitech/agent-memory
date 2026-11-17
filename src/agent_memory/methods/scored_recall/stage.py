@@ -21,7 +21,7 @@ def _cos(a: np.ndarray, b: np.ndarray) -> float:
 def score(entry: Entry, query_vec: np.ndarray, entry_vec: np.ndarray, now: datetime) -> float:
     """recency + importance + relevance, equal weights."""
     hours = max((now - entry.last_used_at).total_seconds() / 3600, 0.0)
-    return DECAY**hours + entry.importance / 10 + _cos(query_vec, entry_vec)
+    return DECAY**hours + min(max(entry.importance, 1), 10) / 10 + _cos(query_vec, entry_vec)
 
 
 def _default_embedder() -> Embedder:
@@ -46,10 +46,10 @@ class ScoredRecall:
                 self._embedder = _default_embedder()
             query = " ".join([*(str(v) for v in task.lead.values()), *task.tags])
             missing = [e for e in rest if (e.id, e.text) not in self._vecs]
-            if missing:
-                for e, v in zip(missing, self._embedder.embed([e.text for e in missing]), strict=True):
-                    self._vecs[(e.id, e.text)] = np.asarray(v, dtype=float)
-            q = np.asarray(self._embedder.embed([query])[0], dtype=float)
+            vecs = self._embedder.embed([*(e.text for e in missing), query])  # one call: new entries + query
+            for e, v in zip(missing, vecs, strict=False):
+                self._vecs[(e.id, e.text)] = np.asarray(v, dtype=float)
+            q = np.asarray(vecs[len(missing)], dtype=float)
             rest = sorted(rest, key=lambda e: -score(e, q, self._vecs[(e.id, e.text)], now))[:TOP_K]
         entries = [*r.rules, *rest]
         store.touch([e.id for e in entries], now)

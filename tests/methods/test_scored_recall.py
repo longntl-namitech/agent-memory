@@ -86,5 +86,12 @@ def test_batched_embedding_and_cache(tmp_path):
     route = lambda store, t: Routed(rules=[], facts=es, log=[])
     st.recall(task(), s, NOW, route)
     st.recall(task(), s, NOW, route)
-    entry_calls = [c for c in emb.calls if len(c) == 2]
-    assert len(entry_calls) == 1  # one batched call for both entries, none on the second recall
+    assert len(emb.calls) == 2
+    assert len(emb.calls[0]) == 3  # both entries plus the query, one call
+    assert len(emb.calls[1]) == 1  # second recall: query only
+
+
+def test_importance_clamped():
+    q, v = np.array([1.0, 0.0]), np.array([1.0, 0.0])
+    assert score(e("a", imp=50), q, v, NOW) == pytest.approx(3.0)
+    assert score(e("a", imp=-3), q, v, NOW) == pytest.approx(2.1)
