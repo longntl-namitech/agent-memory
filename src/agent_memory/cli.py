@@ -1,6 +1,7 @@
 """`agent-memory` command line. Subcommands: `review diff`, `run`."""
 
 import argparse
+import dataclasses
 import json
 import os
 import sys
@@ -32,6 +33,9 @@ LME_CACHE = Path(".cache")
 LME_PER_ABILITY = 10
 LME_SEED = 7
 SUBSET_LIMIT = 1_000_000  # global rule: above 5M, first run a subset under 1M, then ask before the full set
+REFLEXION_NOTE = ("corrections are counted after an oracle-guided retry; "
+                  "compare memory methods on first_attempt_failures")
+BASELINE_NA = "n/a (baseline has no RULES)"
 JUDGE_NOTE = "{model} LLM judge (LongMemEval prompts), not comparable with the official GPT-4o judge"
 
 
@@ -93,6 +97,8 @@ def _run_simulation(name: str, llm: LLMClient, store_dir: Path, results_dir: Pat
                   **({"embedder": embedder} if embedder else {}))
     before = llm.budget.used
     extra, aborted = {"llm_cache": CACHE_NOTE, "per_config_cap": per_config_cap}, None
+    if "reflexion" in cfg.reflect:
+        extra["note"] = REFLEXION_NOTE  # the retry check is the scoring check and the prompt has the rule wording
     try:
         metrics = run_simulation(agent, tasks, SimClock(SIM_START), Reviewer([blocklist["marker"]]),
                                  store=store, corrections=corrections, blocklist=blocklist)
@@ -100,11 +106,14 @@ def _run_simulation(name: str, llm: LLMClient, store_dir: Path, results_dir: Pat
         print(f"{name}: {exc}", file=sys.stderr)
         metrics, aborted = exc.metrics, exc
         extra |= {"partial": True, "completed_tasks": exc.completed_tasks, "crashed_tokens": exc.crashed_tokens}
+    weeks = {f"week {w}": m for w, m in metrics.items()}
+    if cfg.memory:  # a whole-memory baseline recalls only the log, so the planted rule never reaches its prompt
+        weeks = {w: dataclasses.asdict(m) | {"extra_from_wrong_rule": BASELINE_NA} for w, m in weeks.items()}
     path = _results_path(results_dir, name)
     write_result(path, eval_name="simulation", config=name, model=llm.model,
                  embedding_model=embedder.name if embedder else "none", subset=f"all {len(tasks)} tasks",
                  seed=SIM_SEED, tokens=llm.budget.used - before,
-                 metrics={f"week {w}": m for w, m in metrics.items()},
+                 metrics=weeks,
                  extra={**extra, **_counters(agent)}, run_date=date.today().isoformat())
     print(f"{name}: wrote {path}")
     return aborted

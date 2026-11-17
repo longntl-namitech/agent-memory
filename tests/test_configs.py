@@ -230,3 +230,20 @@ def test_per_config_cap_must_be_positive(monkeypatch, capsys, n):
     with pytest.raises(SystemExit) as exc:
         cli.main(["run", "--eval", "simulation", "--configs", "full", "--per-config-cap", n])
     assert exc.value.code == 2 and "--per-config-cap" in capsys.readouterr().err
+
+
+def test_results_mark_baseline_and_reflexion_metrics(monkeypatch, tmp_path):
+    monkeypatch.setattr(cli, "make_llm", lambda budget: stub_llm(tmp_path, budget))
+    monkeypatch.setattr(cli, "make_embedder", ToyEmbedder)
+    names = ["full", "no_reflect", "no_reflexion", "baseline_full_context", "baseline_naive_rag"]
+    assert cli.main(run_args(tmp_path, ",".join(names), "--max-tokens", "1000000")) == 0
+    text = {n: (tmp_path / "results" / f"simulation_{n}.md").read_text() for n in names}
+    note = "- note: corrections are counted after an oracle-guided retry; compare memory methods on first_attempt_failures"
+    assert [note in text[n] for n in names] == [True, True, False, False, False]
+    for n in names:
+        values = [ln.split(": ", 1)[1] for ln in text[n].splitlines() if "- extra_from_wrong_rule: " in ln]
+        assert len(values) == 4
+        if n.startswith("baseline"):
+            assert values == ["n/a (baseline has no RULES)"] * 4
+        else:
+            assert all(v.isdigit() for v in values)
