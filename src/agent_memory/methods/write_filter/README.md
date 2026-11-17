@@ -1,8 +1,8 @@
 # write_filter
 
-Write stage. One LLM call per event (`purpose="write_filter"`) returns JSON with `kind` (rule|fact|log), `key` (facts), `importance` (1-10) and `text` (the distilled lesson, never the raw event). The prompt lists the existing fact keys so the model reuses one.
+Write stage. One LLM call per event (`purpose="write_filter"`), except a `correction` whose normalised text this instance has already handled: it returns nothing and makes no call. The LLM call returns JSON with `kind` (rule|fact|log), `key` (facts), `importance` (1-10) and `text` (the distilled lesson, never the raw event). The prompt lists the existing fact keys so the model reuses one.
 
-- Rules go through `store.add`; an active rule with the same normalised text (lowercase, collapsed whitespace) is skipped, and so is any new rule when `MAX_RULES` (20) are active.
+- Rules go through `store.add`; an active rule with the same normalised text (lowercase, collapsed whitespace) is skipped, and so is any new rule when `MAX_RULES` (20) are active (counted in the instance attribute `dropped_rules`).
 - Facts go through `store.upsert_fact`, so `Booking Link` and `booking-link` are one entry.
 - Logs go through `store.add`.
 - Entries get `created_at = last_used_at = now`, `expires_at = None`. Entry tags are the event tags only; the prompt does not ask for tags and any in a reply are ignored. A `rule` is honoured only for `correction` events, otherwise it is stored as a log line.

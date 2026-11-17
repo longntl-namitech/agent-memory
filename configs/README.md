@@ -18,7 +18,7 @@ Six configs run on LongMemEval: the baselines `lme_baseline_full_context` and `l
   - `naive_rag` and `scored_recall` embed with the fastembed fallback (512-token limit, so sessions are truncated) unless `EMBEDDING_BASE_URL` and `EMBEDDING_MODEL` are set. The results header shows the embedding model used.
   - Session events and the question carry the tag `global` (LongMemEval has no company slugs), so `coala_stores` routes the facts.
 - Judge parsing differs from the original (first token must be `yes`, not `yes` anywhere), and temperature=0 / max_tokens=10 cannot be set through the client.
-- Cost: the full set is above 5,000,000 tokens. The global rule is: run a subset under 1,000,000 first (`--questions 8`), then ask the user before the full set, which needs `--confirm-full`. The dataset is downloaded only with `--download`.
+- Cost: the full set is above 5,000,000 tokens. The global rule is: run a subset under 1,000,000 first (`--questions 8`), then ask the user before the full set. While the full set is above 5,000,000, any run estimated above 1,000,000 needs `--confirm-full`. The dataset is downloaded only with `--download`.
 
 ```
 agent-memory run --eval longmemeval --configs lme_full --questions 8               # estimate only

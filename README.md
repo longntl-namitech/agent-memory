@@ -129,7 +129,7 @@ Estimates from the dry runs (no LLM call was made):
 | Simulation, 14 configs | 1,400,000 tokens (prompt 1,120,000, completion 280,000) | same placeholder; not above 5,000,000 |
 | LongMemEval, `lme_full`, `--questions 8` | 967,200 tokens (prompt 920,000, completion 24,000, overhead 23,200) | per-question overheads are UNVERIFIED placeholders; not above 5,000,000 |
 
-For LongMemEval the full set is above 5,000,000 tokens. The rule is to run a subset under 1,000,000 first and ask before the full set (`--confirm-full`).
+For LongMemEval the full set is above 5,000,000 tokens. The rule is to run a subset under 1,000,000 first and ask before the full set. The CLI enforces it: when the full-set estimate of the chosen configs is above 5,000,000, a run estimated above 1,000,000 is refused unless `--confirm-full` is given.
 
 ## Caveats
 
@@ -142,6 +142,12 @@ For LongMemEval the full set is above 5,000,000 tokens. The rule is to run a sub
 - `lme_b1_write_filter` and `lme_b2_coala_stores` recall an empty memory (a no-memory floor), so abstention scores high.
 - The LongMemEval date format and the placeholder token overheads are UNVERIFIED until the first real download and run.
 - The simulation token estimate is a placeholder until a measured run.
+- Each simulation config is capped at 100,000 tokens (the spec's limit). A stub run used about 147,000 for `baseline_full_context`, so some configs may stop with a PARTIAL result. `--per-config-cap N` raises the cap; take that decision after a pilot run.
+- `write_filter` handles each distinct correction text once per run. The same correction written again (after a violation) makes no LLM call, so reworded copies cannot fill the 20-rule cap. Rules skipped because 20 are already active are counted as `write_filter_dropped_rules` in the results.
+- `extra_from_wrong_rule` is shown as `n/a` for the `full_context` and `naive_rag` baselines: they recall only the log, so the planted rule never reaches their prompt.
+- For configs with `reflexion`, the results say that corrections are counted after an oracle-guided retry. Compare memory methods on `first_attempt_failures`.
+- The LLM cache key is (model, messages), without the endpoint. Changing `OPENAI_BASE_URL` while keeping the same model name replays cached replies.
+- Embedding calls are not counted against the token budgets. With no `EMBEDDING_*` env set, the fastembed model is downloaded from Hugging Face on first use, outside the `--download` gate.
 - The Hermes Agent baseline (`hermes_default`, `hermes_no_memory`, simulation only) is designed in the spec but not built or measured. When it is, its rows will be marked "not cache-reproducible", because Hermes calls the model itself and reads real time.
 
 ## Data and attribution
