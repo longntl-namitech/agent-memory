@@ -1,9 +1,7 @@
-import json
 from datetime import datetime
 
 import numpy as np
 
-from agent_memory.core import registry
 from agent_memory.core.clock import SimClock
 from agent_memory.core.config import build, Config
 from agent_memory.core.eval.simulation import run_simulation
@@ -64,8 +62,44 @@ def test_naive_rag_top_k(tmp_path):
     assert len(emb.calls) == len(texts) and all(len(c) == 1 for c in emb.calls)
     out = mem.recall(TASK, NOW).splitlines()
     assert len(out) == 5
-    assert out[:2] == ["alpha 2", "near 4"]  # best cosine first
-    assert set(out[2:]) <= {"beta 1", "gamma 3", "beta 5", "beta 6", "gamma 7"}
+    assert out == ["alpha 2", "near 4", "beta 1", "gamma 3", "beta 5"]  # ties keep write order
+
+
+def test_naive_rag_survives_archive_and_preload(tmp_path):
+    store = Store(tmp_path)
+    mem = NaiveRag(store, embedder=FakeEmbedder())
+    for t in ["beta 1", "alpha 2", "gamma 3"]:
+        mem.write(ev(t), NOW)
+    store.archive("log-0", NOW)
+    assert mem.recall(TASK, NOW).splitlines()[0] == "alpha 2"
+    assert mem.recall(TASK, NOW).splitlines() == ["alpha 2", "beta 1", "gamma 3"]
+    mem2 = NaiveRag(Store(tmp_path), embedder=FakeEmbedder())  # preloaded store
+    mem2.write(ev("near 4"), NOW)
+    assert mem2.recall(TASK, NOW) == "near 4"
+    ids = [e.id for e in mem2.store._entries["log"]]
+    assert len(ids) == len(set(ids))
+
+
+def test_naive_rag_k_larger_than_history_and_empty(tmp_path):
+    mem = NaiveRag(Store(tmp_path), embedder=FakeEmbedder())
+    assert mem.recall(TASK, NOW) == ""
+    mem.write(ev("alpha 1"), NOW)
+    assert mem.recall(TASK, NOW) == "alpha 1"
+
+
+def test_full_context_ids_unique_after_archive_and_empty(tmp_path):
+    store = Store(tmp_path)
+    mem = FullContext(store)
+    assert mem.recall(TASK, NOW) == ""
+    for t in ["a", "b"]:
+        mem.write(ev(t), NOW)
+    store.archive("log-0", NOW)
+    mem.write(ev("c"), NOW)
+    assert mem.recall(TASK, NOW).splitlines() == ["b", "c"]
+    mem2 = FullContext(Store(tmp_path))
+    mem2.write(ev("d"), NOW)
+    ids = [e.id for e in mem2.store._entries["log"]]
+    assert len(ids) == len(set(ids)) == 4
 
 
 def test_registered_and_simulation_smoke(tmp_path):

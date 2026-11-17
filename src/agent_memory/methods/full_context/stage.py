@@ -11,7 +11,7 @@ class FullContext(Memory):
 
     def __init__(self, store: Store, llm=None, **_deps) -> None:
         self.store = store
-        self._n = len(store.log())
+        self._n = len(store._entries["log"])  # archived lines count too, so ids never repeat
 
     def write(self, event: Event, now: datetime) -> None:
         self.store.add(Entry(id=f"log-{self._n}", kind="log", key=None, tags=event.tags, text=event.text,

@@ -17,22 +17,25 @@ class NaiveRag(Memory):
     def __init__(self, store: Store, llm=None, *, embedder: Embedder, **_deps) -> None:
         self.store = store
         self.embedder = embedder
-        # shortcut: vectors live in memory, parallel to store.log(); a store preloaded with log lines is not re-embedded
+        # shortcut: vectors and texts live in memory; a store preloaded with log lines is not re-embedded
         self._vecs: list[np.ndarray] = []
+        self._texts: list[str] = []
+        self._n = len(store._entries["log"])  # archived lines count too, so ids never repeat
 
     def write(self, event: Event, now: datetime) -> None:
         self._vecs.append(self.embedder.embed([event.text])[0])
-        self.store.add(Entry(id=f"log-{len(self._vecs) - 1}", kind="log", key=None, tags=event.tags,
+        self._texts.append(event.text)
+        self.store.add(Entry(id=f"log-{self._n}", kind="log", key=None, tags=event.tags,
                              text=event.text, importance=5, created_at=now, last_used_at=now,
                              expires_at=None, status="active"))
+        self._n += 1
 
     def recall(self, task: Task, now: datetime) -> str:
         if not self._vecs:
             return ""
         query = " ".join(str(task.lead.get(k, "")) for k in ("name", "company", "product"))
         hits = cosine_index(np.array(self._vecs))(self.embedder.embed([query])[0], TOP_K)
-        log = self.store.log()
-        return "\n".join(log[i].text for i, _ in hits)
+        return "\n".join(self._texts[i] for i, _ in hits)
 
     def reflect(self, now: datetime) -> None:
         pass
