@@ -65,7 +65,7 @@ def test_contrast_tokens():
         text_pairs = [
             ("fg", "bg"), ("fg", "card"), ("fg", "muted"),
             ("muted-fg", "bg"), ("muted-fg", "card"), ("muted-fg", "muted"),
-            ("accent", "bg"), ("accent", "card"), ("accent", "accent-soft"),
+            ("accent", "bg"), ("accent", "card"), ("accent", "accent-soft"), ("muted-fg", "accent-soft"),
             ("on-accent", "accent"), ("danger", "bg"), ("danger", "card"), ("danger", "muted"),
         ]
         for fg, bg in text_pairs:
@@ -112,7 +112,9 @@ def test_icon_buttons_have_accessible_names():
     for svg in re.findall(r"<svg\b[^>]*>", html):
         assert 'aria-hidden="true"' in svg and "xmlns" not in svg
     btn = re.search(r'<button[^>]*id="theme"[^>]*>(.*?)</button>', html, re.S).group(1)
-    assert re.search(r'<span id="theme-label">[^<]+</span>', btn)  # the visible text is the accessible name
+    assert re.search(r'<span id="theme-label">Light theme</span>', btn)  # constant name, aria-pressed carries the state
+    assert 'aria-pressed="false"' in html.split('id="theme"')[1].split(">")[0]
+    assert "theme-label" not in (STATIC / "app.js").read_text()
     for b in re.findall(r"<button\b[^>]*>(.*?)</button>", html, re.S):
         assert re.sub(r"<svg.*?</svg>|<[^>]+>|\s", "", b, flags=re.S), "button without text"
 
@@ -121,14 +123,27 @@ def test_theme_tokens_defined_for_both_themes():
     dark, light = _tokens(":root"), _tokens(':root[data-theme="light"]')
     for token in ("bg", "card", "fg", "muted-fg", "outline", "accent", "on-accent", "danger", "ring"):
         assert token in dark
-    assert set(light) <= set(dark) and {"bg", "fg", "accent", "outline", "ring"} <= set(light)
+    # a colour token with no light override would leak the dark value into the light theme
+    assert set(dark) == set(light), set(dark) ^ set(light)
+
+
+def _px(css: str, selector: str):
+    """The px size declared by the rule for exactly this selector, or None if it inherits."""
+    body = re.search(r"(?:^|\n|\})\s*" + re.escape(selector) + r"\s*\{([^}]*)\}", css).group(1)
+    m = re.search(r"font(?:-size)?:\s*(?:[\w-]+\s+)?(\d+)px", body)
+    return int(m.group(1)) if m else None
 
 
 def test_font_sizes_meet_minimums():
     css = (STATIC / "style.css").read_text()
-    assert re.search(r"body \{[^}]*font: 15px", css)
-    for sel in (r"\.mono", r"\.pane"):
-        px = re.search(sel + r" \{[^}]*?(\d+)px", css).group(1)
-        assert int(px) >= 14, sel
-    sizes = [int(n) for n in re.findall(r"font(?:-size)?:\s*(\d+)px", css)]
-    assert min(sizes) >= 12
+    assert _px(css, "body") == 15
+    # UI text is at least 15px; a rule that sets no size inherits the 15px body size
+    for sel in (".mono", ".meter-label", ".mode-status", ".btn.small", ".tab", ".chips button"):
+        px = _px(css, sel)
+        assert px is None or px >= 15, (sel, px)
+    # memory text (pane, what-the-assistant-saw, entry meta, badges) is at least 14px
+    for sel in (".pane", ".seen", ".entry-time", ".badge"):
+        px = _px(css, sel)
+        assert px is not None and px >= 14, (sel, px)
+    sizes = [int(n) for n in re.findall(r"font(?:-size)?:\s*(?:[\w-]+\s+)?(\d+)px", css)]
+    assert min(sizes) >= 14

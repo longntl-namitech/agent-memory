@@ -45,7 +45,7 @@ body {
 }
 h1, h2, h3 { font-family: var(--serif); font-weight: 600; margin: 0; }
 p { margin: 0; }
-.mono { font-family: var(--mono); font-size: 14px; }
+.mono { font-family: var(--mono); font-size: 15px; }
 .dim { color: var(--muted-fg); }
 .sr, .skip:not(:focus) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .skip:focus { position: fixed; top: var(--s2); left: var(--s2); z-index: 10; padding: var(--s2) var(--s3); background: var(--card); color: var(--fg); border-radius: var(--radius); }
@@ -61,18 +61,17 @@ p { margin: 0; }
 .topbar .btn, .seg-btn, .meter, #sim-date { white-space: nowrap; flex-shrink: 0; }
 .spacer { flex: 1; }
 .meter { display: flex; align-items: baseline; gap: var(--s3); }
-.meter-label { color: var(--muted-fg); font-size: 14px; }
-.meter { gap: var(--s2); }
+.meter-label { color: var(--muted-fg); font-size: 15px; }
+.meter { gap: var(--s2); margin-left: var(--s3); }
 .topbar .btn { padding: var(--s2) var(--s3); }
 .banner { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); padding: var(--s2) var(--s6); background: var(--muted); border-bottom: 1px solid var(--hairline); }
 
 .banner[hidden] { display: none; }
-.mode-status { display: inline-flex; align-items: center; gap: var(--s2); font-size: 14px; color: var(--muted-fg); white-space: nowrap; }
+.mode-status { display: inline-flex; align-items: center; gap: var(--s2); font-size: 15px; color: var(--muted-fg); white-space: nowrap; }
 /* Live is a filled dot, replay a hollow ring; the text says it too, so colour is not the only cue */
 .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--fg); border: 2px solid var(--fg); }
 .mode-status.replay .dot { background: transparent; }
-/* two lines tall so a one-line error in one column does not unbalance the pair */
-.col-error { min-height: calc(3em + 18px); margin: 0; padding: var(--s2) var(--s3); border: 1px solid var(--danger); border-radius: var(--radius); color: var(--danger); }
+.col-error { margin: 0; padding: var(--s2) var(--s3); border: 1px solid var(--danger); border-radius: var(--radius); color: var(--danger); }
 .col-error[hidden] { display: none; }
 .btn.danger { border-color: var(--danger); color: var(--danger); background: transparent; }
 .btn.ghost.danger { color: var(--danger); }
@@ -80,8 +79,6 @@ p { margin: 0; }
 .icon { flex-shrink: 0; margin-right: var(--s1); }
 #theme { padding: var(--s2); }
 #theme { display: inline-flex; align-items: center; white-space: nowrap; }
-.icon-sun, .icon-moon { display: none; }
-:root:not([data-theme="light"]) .icon-sun, :root[data-theme="light"] .icon-moon { display: inline-block; }
 
 /* Buttons */
 .btn, .seg-btn, .tab {
@@ -93,9 +90,11 @@ p { margin: 0; }
 .btn:hover, .seg-btn:hover, .tab:hover { background: var(--muted); }
 .btn.primary { background: var(--fg); color: var(--bg); border-color: var(--fg); }
 .btn.primary:hover { opacity: 0.9; }
-.btn.ghost { background: transparent; border-color: transparent; color: var(--muted-fg); }
-.btn.ghost:hover { color: var(--fg); background: var(--muted); }
-.btn.small { white-space: nowrap; min-height: 32px; padding: var(--s1) var(--s2); font-size: 14px; }
+/* ghost buttons stay recognisable as controls: underlined text, a fill on hover, the shared focus ring */
+.btn.ghost { background: transparent; border-color: transparent; color: var(--muted-fg); text-decoration: underline; text-underline-offset: 3px; }
+.btn.ghost:hover { color: var(--fg); background: var(--muted); text-decoration-thickness: 2px; }
+.btn[aria-pressed="true"]:not(.seg-btn) { background: var(--muted); border-color: var(--fg); }
+.btn.small { white-space: nowrap; min-height: 32px; padding: var(--s1) var(--s2); font-size: 15px; }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .seg { display: inline-flex; }
 .seg-btn { border-radius: 0; }
@@ -114,6 +113,7 @@ p { margin: 0; }
   background: var(--card); border: 1px solid var(--hairline); border-radius: var(--radius); padding: var(--s4);
 }
 .col-head { display: flex; align-items: baseline; gap: var(--s3); }
+.col-tokens { margin-left: auto; white-space: nowrap; }
 .col-head h2 { font-size: 18px; }
 .col { padding: var(--s3) var(--s4); }
 .transcript {
@@ -128,8 +128,8 @@ p { margin: 0; }
 
 /* Memory panel: monospace for memory text */
 .panel { position: relative; display: flex; flex-direction: column; flex: 0 1 210px; min-height: 120px; border: 1px solid var(--hairline); border-radius: var(--radius); background: var(--bg); }
-.tabs { display: flex; align-items: center; justify-content: space-between; gap: var(--s2); padding: var(--s2); border-bottom: 1px solid var(--hairline); }
-.tab { min-height: 32px; padding: var(--s1) var(--s3); font-size: 13px; letter-spacing: 0.06em; border-color: transparent; background: transparent; color: var(--muted-fg); }
+.tabs { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s2); padding: var(--s2); border-bottom: 1px solid var(--hairline); }
+.tab { white-space: nowrap; min-height: 32px; padding: var(--s1) var(--s3); font-size: 15px; letter-spacing: 0.06em; border-color: transparent; background: transparent; color: var(--muted-fg); }
 .tab[aria-selected="true"] { color: var(--fg); border-color: var(--outline); background: var(--card); }
 .tablist { display: flex; gap: var(--s1); }
 .pane { flex: 1; min-height: 0; overflow-y: auto; padding: var(--s2) var(--s3); font: 14px/1.5 var(--mono); }
@@ -138,17 +138,17 @@ p { margin: 0; }
 .entry-body { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .entry-head { display: flex; align-items: baseline; gap: var(--s2); }
 .entry-key { color: var(--muted-fg); }
-.entry-time { margin-left: auto; font-size: 13px; }
+.entry-time { margin-left: auto; font-size: 14px; }
 .entry .btn { flex-shrink: 0; }
 .entry.new { color: var(--accent); background: var(--accent-soft); border-left-color: var(--accent); }
 .entry.new .entry-key { color: var(--accent); }
 .entry.flash { animation: flash 1.6s ease-out; }
-.badge { font-size: 12px; letter-spacing: 0.06em; padding: 0 var(--s1); border-radius: 4px; background: var(--accent); color: var(--on-accent); }
+.badge { font-size: 14px; letter-spacing: 0.06em; padding: 0 var(--s1); border-radius: 4px; background: var(--accent); color: var(--on-accent); }
 .badge.quiet { background: transparent; border: 1px solid var(--outline); color: var(--muted-fg); }
 .old { text-decoration: line-through; }
 .empty { margin: 0; padding: var(--s2) 0; }
 /* overlay over the memory pane, never over the transcript */
-.seen { position: absolute; z-index: 2; top: 45px; left: 0; right: 0; bottom: 0; margin: 0; overflow: auto; padding: var(--s2) var(--s3); background: var(--card); border-top: 1px solid var(--hairline); border-radius: 0 0 var(--radius) var(--radius); white-space: pre-wrap; }
+.seen { font-size: 14px; position: absolute; z-index: 2; top: 45px; left: 0; right: 0; bottom: 0; margin: 0; overflow: auto; padding: var(--s2) var(--s3); background: var(--card); border-top: 1px solid var(--hairline); border-radius: 0 0 var(--radius) var(--radius); white-space: pre-wrap; }
 @keyframes flash { from { background: var(--accent); color: var(--on-accent); } }
 
 /* To-do card */
@@ -163,7 +163,7 @@ p { margin: 0; }
 /* Input bar */
 .inputbar { padding: var(--s3) var(--s6) var(--s4); border-top: 1px solid var(--hairline); display: flex; flex-direction: column; gap: var(--s2); }
 .chips { display: flex; gap: var(--s2); flex-wrap: wrap; }
-.chips button { font: inherit; font-size: 14px; color: var(--fg); background: transparent; border: 1px solid var(--outline); border-radius: 999px; padding: var(--s1) var(--s3); min-height: 32px; cursor: pointer; }
+.chips button { font: inherit; font-size: 15px; color: var(--fg); background: transparent; border: 1px solid var(--outline); border-radius: 999px; padding: var(--s1) var(--s3); min-height: 32px; cursor: pointer; }
 .chips button:hover { background: var(--muted); }
 .send { display: flex; gap: var(--s2); }
 .input { flex: 1; font: inherit; color: var(--fg); background: var(--card); border: 1px solid var(--outline); border-radius: var(--radius); padding: var(--s2) var(--s3); min-height: 40px; }

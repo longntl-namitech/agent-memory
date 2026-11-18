@@ -7,7 +7,6 @@ function setTheme(theme) {
   document.documentElement.dataset.theme = theme;
   const btn = $("#theme");
   btn.setAttribute("aria-pressed", String(theme === "light"));
-  $("#theme-label").textContent = theme === "light" ? "Switch to dark theme" : "Switch to light theme";
   try { localStorage.setItem("theme", theme); } catch (e) { /* storage may be blocked */ }
 }
 
@@ -148,9 +147,9 @@ function render(snap) {
   $("#sim-date").setAttribute("datetime", snap.date.split(" ").pop());
   $("#mode-live").setAttribute("aria-pressed", String(snap.mode === "live"));
   $("#mode-replay").setAttribute("aria-pressed", String(snap.mode === "replay"));
-  $("#tokens-cap").textContent = `tokens, cap ${snap.cap.toLocaleString()}`;
-  $("#tokens-none").textContent = `none ${snap.columns.none.tokens.toLocaleString()}`;
-  $("#tokens-full").textContent = `full ${snap.columns.full.tokens.toLocaleString()}`;
+  $("#tokens-cap").textContent = `Token cap ${snap.cap.toLocaleString()} per column`;
+  $("#tokens-none").textContent = `${snap.columns.none.tokens.toLocaleString()} tokens`;
+  $("#tokens-full").textContent = `${snap.columns.full.tokens.toLocaleString()} tokens`;
   showNotice(snap.notice, true);
   currentMode = snap.mode;
   const labels = { live: "Live model", replay: "Replay, offline", warmup: "Warm-up, recording" };
