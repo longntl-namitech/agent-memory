@@ -105,3 +105,30 @@ def test_app_js_has_no_browser_dialogs_or_innerhtml():
         assert bad not in js, bad
     for need in ("/api/mode", "/api/advance", "/api/reflect", "/api/reset", "/api/wipe", "Confirm wipe", "Escape"):
         assert need in js, need
+
+
+def test_icon_buttons_have_accessible_names():
+    html = (STATIC / "index.html").read_text()
+    for svg in re.findall(r"<svg\b[^>]*>", html):
+        assert 'aria-hidden="true"' in svg and "xmlns" not in svg
+    btn = re.search(r'<button[^>]*id="theme"[^>]*>(.*?)</button>', html, re.S).group(1)
+    assert re.search(r'<span id="theme-label">[^<]+</span>', btn)  # the visible text is the accessible name
+    for b in re.findall(r"<button\b[^>]*>(.*?)</button>", html, re.S):
+        assert re.sub(r"<svg.*?</svg>|<[^>]+>|\s", "", b, flags=re.S), "button without text"
+
+
+def test_theme_tokens_defined_for_both_themes():
+    dark, light = _tokens(":root"), _tokens(':root[data-theme="light"]')
+    for token in ("bg", "card", "fg", "muted-fg", "outline", "accent", "on-accent", "danger", "ring"):
+        assert token in dark
+    assert set(light) <= set(dark) and {"bg", "fg", "accent", "outline", "ring"} <= set(light)
+
+
+def test_font_sizes_meet_minimums():
+    css = (STATIC / "style.css").read_text()
+    assert re.search(r"body \{[^}]*font: 15px", css)
+    for sel in (r"\.mono", r"\.pane"):
+        px = re.search(sel + r" \{[^}]*?(\d+)px", css).group(1)
+        assert int(px) >= 14, sel
+    sizes = [int(n) for n in re.findall(r"font(?:-size)?:\s*(\d+)px", css)]
+    assert min(sizes) >= 12
