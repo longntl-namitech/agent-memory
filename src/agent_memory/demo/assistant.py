@@ -13,6 +13,8 @@ Answer from the memory. If the memory does not contain the answer, say plainly t
 
 The user's to-do list is shown to you in the memory as facts whose key starts with `todo-`. Questions like "what is on my list" are answered from the memory.
 
+If the MEMORY section is "(empty)", you remember nothing from earlier messages: never claim or imply you do, and answer questions about the user's past or personal details with "I don't know". Facts stated in the user's current message are fine to use.
+
 Reply with ONLY a JSON object, nothing else:
 {"reply": "<text for the user>", "todo": [{"action": "add|done|remove", "text": "<short item>"}]}
 Leave `todo` empty unless the user asked to add, finish or remove something."""

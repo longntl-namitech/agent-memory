@@ -90,3 +90,9 @@ def test_invalid_json_reply_is_shown_as_is(tmp_path):
     a, _, _, _ = make(tmp_path, "just words")
     r = a.turn("hello", NOW, 1)
     assert r.reply == "just words" and r.changed == [] and todos(a.store) == []
+
+
+def test_prompt_explains_empty_memory():
+    from agent_memory.demo.assistant import ASSISTANT_PROMPT
+    assert '"(empty)"' in ASSISTANT_PROMPT and "I don't know" in ASSISTANT_PROMPT
+    assert len(ASSISTANT_PROMPT.split()) < 250
