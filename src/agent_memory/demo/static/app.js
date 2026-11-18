@@ -7,6 +7,7 @@ function setTheme(theme) {
   document.documentElement.dataset.theme = theme;
   const btn = $("#theme");
   btn.setAttribute("aria-pressed", String(theme === "light"));
+  btn.textContent = theme === "light" ? "Switch to dark theme" : "Switch to light theme";
   try { localStorage.setItem("theme", theme); } catch (e) { /* storage may be blocked */ }
 }
 
@@ -25,6 +26,7 @@ const seenNew = new Set();
 let busy = false;
 let sending = false;
 let serverBusy = false;
+let acting = false;
 
 function el(tag, cls, text) {
   const n = document.createElement(tag);
@@ -34,18 +36,27 @@ function el(tag, cls, text) {
 }
 
 async function api(path, body) {
-  const r = await fetch(path, body === undefined ? {} : {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
-  });
+  // Only /api/state is a GET. A body-less POST sends no Content-Type; with a body it is application/json.
+  const init = path === "/api/state" ? {} : { method: "POST" };
+  if (body !== undefined) { init.headers = { "Content-Type": "application/json" }; init.body = JSON.stringify(body); }
+  const r = await fetch(path, init);
   const data = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(data.error || `request failed (${r.status})`);
   return data;
 }
 
-function showNotice(text) {
+let dismissed = null;  // a dismissed server notice stays hidden until its text changes
+function showNotice(text, fromServer) {
   const n = $("#notice");
-  n.textContent = text || "";
+  if (fromServer && text === dismissed) text = "";
+  if (!fromServer) dismissed = null;
+  $("#notice-text").textContent = text || "";
   n.hidden = !text;
+}
+
+function dismissNotice() {
+  dismissed = $("#notice-text").textContent;
+  $("#notice").hidden = true;
 }
 
 function stamp(iso) { return iso.slice(5, 16).replace("T", " "); }
@@ -122,10 +133,18 @@ function render(snap) {
   $("#sim-date").setAttribute("datetime", snap.date.split(" ").pop());
   $("#mode-live").setAttribute("aria-pressed", String(snap.mode === "live"));
   $("#mode-replay").setAttribute("aria-pressed", String(snap.mode === "replay"));
-  $("#tokens-cap").textContent = `cap ${snap.cap.toLocaleString()} each`;
+  $("#tokens-cap").textContent = `cap ${snap.cap.toLocaleString()}`;
   $("#tokens-none").textContent = `no memory ${snap.columns.none.tokens.toLocaleString()}`;
   $("#tokens-full").textContent = `memory ${snap.columns.full.tokens.toLocaleString()}`;
-  showNotice(snap.notice);
+  showNotice(snap.notice, true);
+  const live = snap.mode === "live";
+  $("#mode-text").textContent = live ? "Live model" : "Replay, offline";
+  $("#mode-status").classList.toggle("replay", !live);
+  for (const c of COLS) {
+    const err = $(`#error-${c}`);
+    err.textContent = snap.columns[c].error || "";
+    err.hidden = !snap.columns[c].error;
+  }
   const chips = $("#chips");
   if (!chips.children.length) {
     for (const p of snap.prompts.script) {
@@ -137,7 +156,7 @@ function render(snap) {
   }
   for (const c of COLS) { renderPanel(c, snap.columns[c]); renderTodos(c, snap.columns[c]); }
   serverBusy = snap.busy;
-  setBusy(snap.busy || sending);
+  setBusy(snap.busy || sending || acting);
   pollWhileBusy(snap.busy);
 }
 
@@ -165,7 +184,7 @@ function pollWhileBusy(isBusy) {
 
 function setBusy(v) {
   busy = v;
-  $("#send-btn").disabled = v;
+  for (const id of ["send-btn", "advance", "reflect", "reset", "wipe", "mode-live", "mode-replay"]) $(`#${id}`).disabled = v;
   $$("#chips button").forEach((b) => { b.disabled = v; });
 }
 
@@ -299,6 +318,55 @@ function initTabs(c) {
 }
 
 initTheme();
+// One request at a time: every control is disabled while it runs and is re-enabled whether it works or not.
+async function act(path, body, after) {
+  if (busy) return;
+  acting = true;
+  setBusy(true);
+  try {
+    const snap = await api(path, body);
+    if (after) after();
+    render(snap);
+  } catch (e) {
+    showNotice(e.message);
+  } finally {
+    acting = false;
+    setBusy(serverBusy || sending);
+    pollWhileBusy(serverBusy);
+  }
+}
+
+function clearTranscripts() { for (const c of COLS) $(`#transcript-${c}`).replaceChildren(); }
+
+let wipeTimer = null;
+function disarmWipe() {
+  clearTimeout(wipeTimer);
+  wipeTimer = null;
+  const w = $("#wipe");
+  w.textContent = "Wipe all data";
+  w.classList.remove("danger");
+}
+
+$("#mode-live").addEventListener("click", () => act("/api/mode", { mode: "live" }));
+$("#mode-replay").addEventListener("click", () => act("/api/mode", { mode: "replay" }));
+$("#advance").addEventListener("click", () => act("/api/advance"));
+$("#reflect").addEventListener("click", () => act("/api/reflect"));
+$("#reset").addEventListener("click", () => act("/api/reset", undefined, clearTranscripts));
+$("#wipe").addEventListener("click", () => {
+  if (wipeTimer === null) {  // first click arms, a second click within 5 seconds wipes; no browser dialogs
+    const w = $("#wipe");
+    w.textContent = "Confirm wipe";
+    w.classList.add("danger");
+    wipeTimer = setTimeout(disarmWipe, 5000);
+    return;
+  }
+  disarmWipe();
+  act("/api/wipe", undefined, clearTranscripts);
+});
+$("#notice-close").addEventListener("click", dismissNotice);
+document.addEventListener("keydown", (ev) => {
+  if (ev.key === "Escape" && !ev.defaultPrevented && !$("#notice").hidden) dismissNotice();
+});
 COLS.forEach(initTabs);
 $("#send").addEventListener("submit", (ev) => { ev.preventDefault(); send($("#input").value); });
 api("/api/state").then(render).catch((e) => showNotice(e.message));

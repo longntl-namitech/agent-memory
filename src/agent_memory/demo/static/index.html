@@ -3,11 +3,12 @@
 Hook contract for app.js (T13-T15). Do not rename without updating them.
 Data: [data-column="none"|"full"] on #col-none / #col-full (the column keys of the snapshot).
 Top bar: #mode-live, #mode-replay (aria-pressed), #tokens-none, #tokens-full, #tokens-cap,
-  #sim-date, #advance, #reflect, #theme (aria-pressed), #notice (live region, hidden until used).
+  #sim-date, #advance, #reflect, #theme (aria-pressed, label names the action), #mode-status (.dot + #mode-text),
+  #notice (live region, hidden until used; #notice-text, #notice-close), #error-<c> per column (snapshot error).
 Per column <c> in none|full: #transcript-<c> (holds .msg and .msg.user), #tab-<c>-rules|facts|log,
   #pane-<c>-rules|facts|log (holds .entry and .entry.new), #seen-toggle-<c>, #seen-<c>,
   #todo-<c> with a .todo-list ul.
-Input bar: #chips (T13 fills it with three prompt chips), #send (form), #input, #send-btn, #reset.
+Input bar: #chips (T13 fills it with three prompt chips), #send (form), #input, #send-btn, #reset, #wipe (two-step confirm).
 -->
 <html lang="en" data-theme="dark">
 <head>
@@ -25,6 +26,7 @@ Input bar: #chips (T13 fills it with three prompt chips), #send (form), #input, 
     <button type="button" id="mode-live" class="seg-btn" aria-pressed="true">Live</button>
     <button type="button" id="mode-replay" class="seg-btn" aria-pressed="false">Replay</button>
   </div>
+  <span class="mode-status" id="mode-status" role="status"><span class="dot" aria-hidden="true"></span><span id="mode-text">Live</span></span>
   <div class="meter" id="token-meter" role="group" aria-label="Token use">
     <span class="meter-label">Tokens</span>
     <span class="mono" id="tokens-none">no memory 0</span>
@@ -35,9 +37,12 @@ Input bar: #chips (T13 fills it with three prompt chips), #send (form), #input, 
   <span class="sr">Simulated date</span><time class="mono" id="sim-date" role="status" datetime="2026-01-05">Mon 5 Jan 2026</time>
   <button type="button" class="btn" id="advance">Advance a day</button>
   <button type="button" class="btn" id="reflect">Run Friday reflect</button>
-  <button type="button" class="btn ghost" id="theme" aria-pressed="false" aria-label="Light theme">Light theme</button>
+  <button type="button" class="btn ghost" id="theme" aria-pressed="false">Switch to light theme</button>
 </header>
-<div class="banner" id="notice" role="status" aria-live="polite" hidden></div>
+<div class="banner" id="notice" role="status" aria-live="polite" hidden>
+  <span id="notice-text"></span>
+  <button type="button" class="btn ghost small" id="notice-close">Dismiss</button>
+</div>
 
 <main class="columns">
   <section class="col" id="col-none" data-column="none" aria-labelledby="h-none">
@@ -45,6 +50,7 @@ Input bar: #chips (T13 fills it with three prompt chips), #send (form), #input, 
       <h2 id="h-none">No memory</h2>
       <p class="dim">Sees only the current message</p>
     </header>
+    <p class="col-error" id="error-none" role="status" hidden></p>
     <div class="transcript" id="transcript-none" role="log" aria-live="polite" aria-label="Conversation, no memory"></div>
     <div class="panel">
       <div class="tabs"><div class="tablist" role="tablist" aria-label="Memory, no memory">
@@ -70,6 +76,7 @@ Input bar: #chips (T13 fills it with three prompt chips), #send (form), #input, 
       <h2 id="h-full">With memory</h2>
       <p class="dim">Writes memory every turn</p>
     </header>
+    <p class="col-error" id="error-full" role="status" hidden></p>
     <div class="transcript" id="transcript-full" role="log" aria-live="polite" aria-label="Conversation, with memory"></div>
     <div class="panel">
       <div class="tabs"><div class="tablist" role="tablist" aria-label="Memory, with memory">
@@ -98,6 +105,7 @@ Input bar: #chips (T13 fills it with three prompt chips), #send (form), #input, 
     <input class="input" id="input" type="text" placeholder="Type a message for both assistants" maxlength="2000">
     <button type="submit" class="btn primary" id="send-btn">Send</button>
     <button type="button" class="btn" id="reset">Reset</button>
+    <button type="button" class="btn ghost" id="wipe">Wipe all data</button>
   </form>
 </footer>
 <script src="/static/app.js" defer></script>

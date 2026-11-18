@@ -82,7 +82,8 @@ def test_hook_ids_exist():
     p.feed((STATIC / "index.html").read_text())
     ids = {a["id"] for a in p.attrs if "id" in a}
     need = {"mode-live", "mode-replay", "tokens-none", "tokens-full", "tokens-cap", "sim-date",
-            "notice", "advance", "reflect", "theme", "chips", "send", "input", "send-btn", "reset"}
+            "notice", "notice-text", "notice-close", "mode-status", "mode-text", "wipe", "error-none", "error-full",
+            "advance", "reflect", "theme", "chips", "send", "input", "send-btn", "reset"}
     for c in ("none", "full"):
         need |= {f"transcript-{c}", f"seen-toggle-{c}", f"seen-{c}", f"todo-{c}", f"col-{c}"}
         need |= {f"{k}-{c}-{n}" for k in ("tab", "pane") for n in ("rules", "facts", "log")}
@@ -96,3 +97,11 @@ def test_static_has_flash_and_reduced_motion_css():
     assert "animation: none" in block
     rule = re.search(r"\.entry\.new \{(.*?)\}", css, re.S).group(1)  # the static cue stays under reduced motion
     assert "border-left-color: var(--accent)" in rule and "animation" not in rule
+
+
+def test_app_js_has_no_browser_dialogs_or_innerhtml():
+    js = (STATIC / "app.js").read_text()
+    for bad in ("alert(", "confirm(", "prompt(", "innerHTML", "outerHTML", "insertAdjacentHTML"):
+        assert bad not in js, bad
+    for need in ("/api/mode", "/api/advance", "/api/reflect", "/api/reset", "/api/wipe", "Confirm wipe", "Escape"):
+        assert need in js, need

@@ -64,7 +64,17 @@ p { margin: 0; }
 .meter-label { color: var(--muted-fg); font-size: 13px; }
 .meter { gap: var(--s2); }
 .topbar .btn { padding: var(--s2) var(--s3); }
-.banner { padding: var(--s2) var(--s6); background: var(--muted); border-bottom: 1px solid var(--hairline); }
+.banner { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); padding: var(--s2) var(--s6); background: var(--muted); border-bottom: 1px solid var(--hairline); }
+
+.banner[hidden] { display: none; }
+.mode-status { display: inline-flex; align-items: center; gap: var(--s2); font-size: 13px; color: var(--muted-fg); white-space: nowrap; }
+/* Live is a filled dot, replay a hollow ring; the text says it too, so colour is not the only cue */
+.dot { width: 10px; height: 10px; border-radius: 50%; background: var(--fg); border: 2px solid var(--fg); }
+.mode-status.replay .dot { background: transparent; }
+.col-error { margin: 0; padding: var(--s2) var(--s3); border: 1px solid var(--danger); border-radius: var(--radius); color: var(--danger); }
+.col-error[hidden] { display: none; }
+.btn.danger { border-color: var(--danger); color: var(--danger); background: transparent; }
+.btn.ghost.danger { color: var(--danger); }
 
 /* Buttons */
 .btn, .seg-btn, .tab {
