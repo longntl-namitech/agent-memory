@@ -1,6 +1,8 @@
 """To-do list kept as facts (key prefix `todo-`, text `[open] ...` or `[done] ...`)."""
+import hashlib
 import json
 import re
+import unicodedata
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -32,10 +34,15 @@ def parse_reply(raw: str) -> tuple[str, list[dict]]:
                         and isinstance(a.get("text"), str) and a["text"].strip()]
 
 
+def _ascii(text: str) -> str:
+    nfd = unicodedata.normalize("NFD", text.replace("đ", "d").replace("Đ", "D"))
+    return slug("".join(c for c in nfd if not unicodedata.combining(c)))
+
+
 def _key(text: str) -> str:
-    key = slug(TODO_PREFIX + text)
-    assert key.startswith(TODO_PREFIX)
-    return key
+    # the hash keeps distinct texts apart (and non-ASCII-only text valid); same text, same key
+    h = hashlib.sha1(unicodedata.normalize("NFC", text.strip().lower()).encode()).hexdigest()[:6]
+    return "-".join(p for p in (TODO_PREFIX.rstrip("-"), _ascii(text)[:40].strip("-"), h) if p)
 
 
 def _strip(text: str) -> str:
@@ -47,7 +54,7 @@ def _find(store: Store, text: str) -> Entry | None:
     for e in items:
         if e.key == _key(text):
             return e
-    s, low = slug(text), text.lower()
+    s, low = _ascii(text), text.lower()
     hits = [e for e in items if e.text.startswith("[open] ") and s and (s in e.key or low in e.text.lower())]
     return hits[0] if len(hits) == 1 else None  # never act on an ambiguous match
 
@@ -58,7 +65,7 @@ def apply_actions(store: Store, actions: list[dict], now: datetime) -> list[str]
         text = a["text"].strip()
         if a["action"] == "add":
             key = _key(text)
-            store.upsert_fact(Entry(id=f"fact-{key}-{len(store.facts())}", kind="fact", key=key, tags=["global"],
+            store.upsert_fact(Entry(id=f"fact-{key}-{len(store.all_facts())}", kind="fact", key=key, tags=["global"],
                                     text=f"[open] {text}", importance=5, created_at=now, last_used_at=now,
                                     expires_at=None, status="active"))
             keys.append(key)

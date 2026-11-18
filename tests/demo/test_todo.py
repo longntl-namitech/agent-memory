@@ -77,3 +77,24 @@ def test_todos_ignore_non_todo_facts(tmp_path):
                         created_at=NOW, last_used_at=NOW, expires_at=None, status="active"))
     add(s, "Buy milk")
     assert [t.text for t in todos(s)] == ["Buy milk"]
+
+
+def test_vietnamese_keys_are_unique_and_valid(tmp_path):
+    store = Store(tmp_path)
+    texts = ["gọi nha sĩ", "mua sữa", "mua sứa", "đi khám răng", "đỏ"]
+    keys = [add(store, t)[0] for t in texts]
+    assert len(set(keys)) == len(texts) and all(k.startswith("todo-") and k.isascii() for k in keys)
+    assert add(store, "mua sữa")[0] == keys[1]
+    apply_actions(store, [{"action": "done", "text": "mua sứa"}], LATER)
+    assert {t.text: t.done for t in todos(store)}["mua sứa"] and not {t.text: t.done for t in todos(store)}["mua sữa"]
+    apply_actions(store, [{"action": "done", "text": "đi kham rang"}], LATER)  # loose, ascii part
+    assert [t.done for t in todos(store) if t.text == "đi khám răng"] == [True]
+
+
+def test_fact_ids_unique_after_remove(tmp_path):
+    store = Store(tmp_path)
+    add(store, "a b")
+    apply_actions(store, [{"action": "remove", "text": "a b"}], LATER)
+    add(store, "c d")
+    ids = [e.id for e in store.all_facts()]
+    assert len(ids) == len(set(ids)) == 2
