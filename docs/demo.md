@@ -6,7 +6,7 @@ The demo must be run from a checkout of the repo: the demo configs (`configs/dem
 
 0. Do the warm-up in advance, not on stage: it calls the model, costs tokens and takes time.
 1. Set the environment (read on the server, never sent to the page):
-   - Required for live mode and `--warmup`: `OPENAI_API_KEY`, `EMBEDDING_BASE_URL`, `EMBEDDING_MODEL`.
+   - Required for live mode and `--warmup`: `OPENAI_API_KEY`, `EMBEDDING_MODEL`. `EMBEDDING_BASE_URL` and `EMBEDDING_API_KEY` default to `OPENAI_BASE_URL` (else the OpenAI URL) and `OPENAI_API_KEY`.
    - Optional: `OPENAI_BASE_URL`, `OPENAI_MODEL` (default `gpt-5.4-nano`), `EMBEDDING_API_KEY`.
    - Replay mode needs none of them, but it needs the data folder of a finished warm-up: the warm-up saves the model names (names only, no keys) in `llm-cache-rehearsed/meta.json` and replay uses those. `--mode replay` without a warm-up exits with an error.
 2. Look at the estimate (no network call):

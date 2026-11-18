@@ -45,8 +45,17 @@ def test_warmup_without_key_exits_2(capsys, data_dir, monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "")
     assert cli.main(["demo", "--warmup", "--data-dir", str(data_dir)]) == 2
     err = capsys.readouterr().err
-    assert "OPENAI_API_KEY" in err and "EMBEDDING_BASE_URL" in err and "EMBEDDING_MODEL" in err
+    assert "OPENAI_API_KEY" in err and "EMBEDDING_MODEL" in err
     assert cli.main(["demo", "--data-dir", str(data_dir)]) == 2  # live mode too, before any call
+
+
+def test_embedding_endpoint_and_key_default_to_the_llm_ones(data_dir, monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "k")
+    monkeypatch.setenv("EMBEDDING_MODEL", "m")
+    monkeypatch.setenv("OPENAI_BASE_URL", "http://llm")
+    assert cli.main(["demo", "--warmup", "--data-dir", str(data_dir)], demo_transport=transport,
+                    demo_embed_transport=embed) == 0
+    assert cli.os.environ["EMBEDDING_BASE_URL"] == "http://llm" and cli.os.environ["EMBEDDING_API_KEY"] == "k"
 
 
 def test_unsafe_data_dir_exits_2(capsys):

@@ -419,7 +419,7 @@ def _run(args, parser) -> int:
     return code
 
 
-_DEMO_LIVE_ENV = ("OPENAI_API_KEY", "EMBEDDING_BASE_URL", "EMBEDDING_MODEL")  # OPENAI_BASE_URL, EMBEDDING_API_KEY optional
+_DEMO_LIVE_ENV = ("OPENAI_API_KEY", "EMBEDDING_MODEL")  # OPENAI_BASE_URL, EMBEDDING_BASE_URL, EMBEDDING_API_KEY optional
 
 
 def _demo(args, *, transport=None, embed_transport=None, ready=None) -> int:
@@ -443,6 +443,10 @@ def _demo(args, *, transport=None, embed_transport=None, ready=None) -> int:
         print("error: no rehearsed session in the data dir, run `agent-memory demo --warmup` first", file=sys.stderr)
         return 2
     if mode != "replay":
+        if not os.environ.get("EMBEDDING_BASE_URL"):  # embeddings share the LLM endpoint and key unless set apart
+            os.environ["EMBEDDING_BASE_URL"] = os.environ.get("OPENAI_BASE_URL") or "https://api.openai.com/v1"
+            if os.environ.get("OPENAI_API_KEY"):
+                os.environ.setdefault("EMBEDDING_API_KEY", os.environ["OPENAI_API_KEY"])
         missing = [v for v in _DEMO_LIVE_ENV if not os.environ.get(v)
                    and not (v == "OPENAI_API_KEY" and transport) and not (v != "OPENAI_API_KEY" and embed_transport)]
         if missing:
