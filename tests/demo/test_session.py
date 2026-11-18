@@ -24,6 +24,7 @@ def make_transport(fail_on=None, barrier=None):
             todo = [{"action": "add", "text": "call the dentist"}] if "dentist" in user else []
             return json.dumps({"reply": f"re: {user}", "todo": todo}), 10, 5
         if "memory writer" in user:
+            user = user.split("Chat turn:")[1]  # the prompt's own examples mention Hanoi
             if "Hanoi" in user:
                 e = [{"kind": "fact", "key": "city", "text": "Lives in Hanoi", "importance": 7}]
             elif "Ho Chi Minh" in user:

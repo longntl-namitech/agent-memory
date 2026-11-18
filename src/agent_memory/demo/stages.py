@@ -9,6 +9,7 @@ from agent_memory.core.layout import MAX_RULES, Entry, Store, slug
 from agent_memory.core.llm import LLMClient
 from agent_memory.core.memory import Event, Task, WriteStage
 from agent_memory.core.registry import register
+from agent_memory.demo.todo import TODO_PREFIX
 
 _KINDS = ("rule", "fact", "log")
 MAX_ENTRIES = 6
@@ -17,9 +18,10 @@ _TAGS = ["global"]  # the demo has one user, so every entry applies everywhere; 
 _PROMPT = """You are the memory writer of a personal chat assistant. Read the chat turn and write down what is worth remembering about the USER.
 Reply with JSON only: {{"entries": [{{"kind": "fact"|"rule"|"log", "key": str, "text": str, "importance": 1-10}}]}}
 - At most {max_entries} entries. Use an empty list when nothing is worth remembering.
-- text: a short distilled statement about the user in your own words, never a transcript.
-- fact: a stable detail about the user (name, city, job, family, likes). Give it a short key.
-  Reuse one of these existing keys if it is the same fact, do not invent a variant: {keys}
+- text: a short distilled statement about the user in the third person ("The user lives in Hanoi."), never a transcript.
+- fact: ONE stable detail about the user per entry (name, city, job, family, likes): write the name and the city as two facts, not one.
+  The key names the attribute ("name", "city", "job"), never the value ("lives-in-hanoi" is wrong), so a new value overwrites the old one.
+  Reuse one of these existing keys if it is the same attribute, do not invent a variant: {keys}
 - rule: only a standing preference or instruction for how the assistant should always behave.
 - log: anything else worth a line, including one-off situations ("this week I'm on a diet").
 - Reminders and to-do items are handled elsewhere: do NOT record them.
@@ -60,7 +62,7 @@ class AssistantWrite(WriteStage):
         self.skipped_entries = 0  # malformed single entries (unknown kind, empty text, not an object)
 
     def write(self, event: Event, store: Store, now: datetime, llm: LLMClient) -> list[Entry]:
-        keys = sorted({f.key for f in store.facts()})
+        keys = sorted({f.key for f in store.facts() if not f.key.startswith(TODO_PREFIX)})  # to-dos are not the model's
         prompt = _PROMPT.format(max_entries=MAX_ENTRIES, keys=", ".join(keys) or "(none)", text=event.text)
         items = self._parse(llm.chat([{"role": "user", "content": prompt}], purpose="assistant_write").text)
         if items is None:
@@ -75,8 +77,8 @@ class AssistantWrite(WriteStage):
 
     def _write_one(self, d: dict, store: Store, now: datetime) -> Entry | None:
         kind, key = d["kind"], slug(d["key"])
-        if kind == "fact" and not key:
-            kind = "log"  # a fact needs a key to be overwritten later
+        if kind == "fact" and (not key or key.startswith(TODO_PREFIX)):
+            kind = "log"  # a fact needs a key to be overwritten later; a to-do key is never overwritten by a fact
         mk = lambda id_, key=None: Entry(id=id_, kind=kind, key=key, tags=list(_TAGS), text=d["text"],
                                          importance=d["importance"], created_at=now, last_used_at=now,
                                          expires_at=None, status="active")

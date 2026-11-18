@@ -148,3 +148,21 @@ def test_lab_config_tests_unaffected():
     stems = [p.stem for p in cli.CONFIGS.glob("*.toml")]
     assert not any(s.startswith("demo") for s in stems)
     assert {p.stem for p in DEMO.glob("*.toml")} == {"demo_full", "demo_no_memory"}
+
+
+def test_write_never_overwrites_a_todo_fact(tmp_path, stages):
+    # real model output: it reused the to-do key (which was listed as "existing") for the name and city
+    from agent_memory.demo.todo import apply_actions, todos
+    store = Store(tmp_path)
+    apply_actions(store, [{"action": "add", "text": "call the dentist on Friday"}], NOW)
+    key = todos(store)[0].key
+    llm = StubLLM(reply({"kind": "fact", "key": key, "text": "User is An and lives in Ho Chi Minh City."}))
+    stages.AssistantWrite().write(ev(), store, NOW, llm)
+    assert key not in llm.prompts[0]  # to-do keys are not offered for reuse
+    assert [(t.key, t.text) for t in todos(store)] == [(key, "call the dentist on Friday")]
+    assert [e.text for e in store.log()] == ["User is An and lives in Ho Chi Minh City."]
+
+
+def test_prompt_asks_for_attribute_keys_and_separate_facts():
+    from agent_memory.demo.stages import _PROMPT
+    assert "never the value" in _PROMPT and "two facts" in _PROMPT and "third person" in _PROMPT
