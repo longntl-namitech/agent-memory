@@ -1,9 +1,10 @@
 # Chat demo: pitch checklist
 
-The demo is a local web page with two assistants answering the same messages side by side: one with no memory and one with the lab's full memory (write, sort, recall, reflect, forget). It is a toy personal assistant for a fictional user named An, not part of the lab's measurements. See the [Demo section of the README](../README.md#demo) for the short version.
+The demo must be run from a checkout of the repo: the demo configs (`configs/demo/`) and the default `.demo/` folder are not packaged in a wheel. It is a local web page with two assistants answering the same messages side by side: one with no memory and one with the lab's full memory (write, sort, recall, reflect, forget). It is a toy personal assistant for a fictional user named An, not part of the lab's measurements. See the [Demo section of the README](../README.md#demo) for the short version.
 
 ## Before the pitch
 
+0. Do the warm-up in advance, not on stage: it calls the model, costs tokens and takes time.
 1. Set the environment (read on the server, never sent to the page):
    - Required for live mode and `--warmup`: `OPENAI_API_KEY`, `EMBEDDING_BASE_URL`, `EMBEDDING_MODEL`.
    - Optional: `OPENAI_BASE_URL`, `OPENAI_MODEL` (default `gpt-5.4-nano`), `EMBEDDING_API_KEY`.
@@ -39,7 +40,7 @@ Use the three example prompts above the input (or type them):
 2. `I just moved to Hanoi.` The `city` fact is overwritten and the old value is shown as replaced.
 3. `Where do I live and what's on my list?` The memory column answers from memory (open "What the assistant saw" to show why); the other column says it does not know.
 
-Optional second act: send `This week I'm on a diet.`, then press "Advance a day" seven times. The LOG lines expire and are archived after seven days while the facts and the to-do list stay. "Run Friday reflect" turns the log lines into rules.
+Optional second act: send `This week I'm on a diet.`, then press "Advance a day" seven times. The LOG lines expire and are archived after seven days while the facts and the to-do list stay. "Run Friday reflect" makes one model call that reads the active log lines and may write up to 3 rules from them, archiving the log lines it used.
 
 Each memory entry has a button to forget it. "Reset" returns both columns to the start (date back to Monday 2026-01-05).
 
@@ -47,8 +48,8 @@ Each memory entry has a button to forget it. "Reset" returns both columns to the
 
 - Live always calls the model, so the token meter moves on every answer. Each column has its own cap; a column that reaches it shows "Token cap reached" and the other keeps going.
 - Replay never calls the model. A message that is not in the warm-up cache shows "Not in the rehearsed script, replay cannot answer" in that column.
-- If a live call fails (network or provider error), the demo switches to replay by itself and says so ("Live call failed, switched to replay, replaying your last N turns"). Only your messages are replayed: both columns are reset first, the date goes back to the start and any "Run Friday reflect" or forgotten entries are not redone. Messages you typed freely show the miss message.
-- The "Replay" button does the same switch by hand; "Live" switches back and keeps the token counts.
+- If a live call fails (network or provider error), the demo switches to replay by itself and says so: "Live call failed, switched to replay. Memory rebuilt from your N messages. The date, reflect and forgotten items were reset." Only your messages are replayed: both columns are reset first, the date goes back to the start and "Run Friday reflect" and forgotten entries are not redone. Messages you typed freely show the miss message.
+- The "Replay" button does the same switch by hand, with the notice "Switched to replay. Memory rebuilt from your N messages. The date, reflect and forgotten items were reset."; "Live" switches back and keeps the token counts.
 
 ## If something goes wrong
 
@@ -61,8 +62,8 @@ Each memory entry has a button to forget it. "Reset" returns both columns to the
 
 - Text typed into the demo is sent to the configured LLM and embedding providers in live mode and in the warm-up. Do not type anything you do not want a provider to see.
 - The page makes no request to any host except the local server, and the key is never sent to the page or logged.
-- All stored data lives in `.demo/` in the repo (gitignored): `stores/`, `llm-cache-live/`, `llm-cache-rehearsed/`, `embedding-cache/`. `--data-dir` changes the location; the "Wipe all data" button asks for a second click to confirm.
+- All stored data lives in `.demo/` (gitignored): `stores/`, `llm-cache-live/`, `llm-cache-rehearsed/`, `embedding-cache/`. the default is the repo's `.demo/` folder and `--data-dir` changes the location; the "Wipe all data" button asks for a second click to confirm.
 
 ## Page basics
 
-Dark by default; "Light theme" switches and the choice is remembered in the browser. Enter sends the message. The memory tabs (RULES, FACTS, LOG) work with the arrow keys, Home and End; Escape closes the "What the assistant saw" panel and the notice banner.
+The page starts dark (the system colour scheme is not used); "Light theme" switches and the choice is remembered in the browser. Enter sends the message. The memory tabs (RULES, FACTS, LOG) work with the arrow keys, Home and End; Escape closes the "What the assistant saw" panel and the notice banner.
