@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent memory demo</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<a class="skip" href="#input">Skip to the message box</a>
+<header class="topbar" role="banner">
+  <h1 class="brand">Agent memory</h1>
+  <div class="seg" role="group" aria-label="Mode">
+    <button type="button" id="mode-live" class="seg-btn" aria-pressed="true">Live</button>
+    <button type="button" id="mode-replay" class="seg-btn" aria-pressed="false">Replay</button>
+  </div>
+  <div class="meter" id="token-meter" aria-label="Token use">
+    <span class="meter-label">Tokens</span>
+    <span class="mono" id="tokens-none">no memory 0</span>
+    <span class="mono" id="tokens-full">memory 0</span>
+    <span class="mono dim" id="tokens-cap"></span>
+  </div>
+  <div class="spacer"></div>
+  <time class="mono" id="sim-date" aria-label="Simulated date">Mon 5 Jan 2026</time>
+  <button type="button" class="btn" id="advance">Advance a day</button>
+  <button type="button" class="btn" id="reflect">Run Friday reflect</button>
+  <button type="button" class="btn ghost" id="theme" aria-label="Switch between dark and light theme">Theme</button>
+</header>
+<div class="banner" id="notice" role="status" aria-live="polite" hidden></div>
+
+<main class="columns">
+  <section class="col" id="col-none" data-column="none" aria-labelledby="h-none">
+    <header class="col-head">
+      <h2 id="h-none">No memory</h2>
+      <p class="dim">Sees only the current message</p>
+    </header>
+    <div class="transcript" id="transcript-none" role="log" aria-live="polite" aria-label="Conversation, no memory"></div>
+    <div class="panel">
+      <div class="tabs" role="tablist" aria-label="Memory, no memory">
+        <button type="button" role="tab" class="tab" id="tab-none-rules" aria-controls="pane-none-rules" aria-selected="true">RULES</button>
+        <button type="button" role="tab" class="tab" id="tab-none-facts" aria-controls="pane-none-facts" aria-selected="false" tabindex="-1">FACTS</button>
+        <button type="button" role="tab" class="tab" id="tab-none-log" aria-controls="pane-none-log" aria-selected="false" tabindex="-1">LOG</button>
+        <button type="button" class="btn ghost small push" id="seen-toggle-none" aria-expanded="false" aria-controls="seen-none">What the assistant saw</button>
+      </div>
+      <div class="pane" role="tabpanel" id="pane-none-rules" aria-labelledby="tab-none-rules"></div>
+      <div class="pane" role="tabpanel" id="pane-none-facts" aria-labelledby="tab-none-facts" hidden></div>
+      <div class="pane" role="tabpanel" id="pane-none-log" aria-labelledby="tab-none-log" hidden></div>
+      <pre class="seen mono" id="seen-none" hidden></pre>
+    </div>
+    <section class="todo" id="todo-none" aria-label="To-do list, no memory">
+      <h3>To-do</h3>
+      <ul class="todo-list"></ul>
+    </section>
+  </section>
+
+  <section class="col" id="col-full" data-column="full" aria-labelledby="h-full">
+    <header class="col-head">
+      <h2 id="h-full">With memory</h2>
+      <p class="dim">Writes memory every turn</p>
+    </header>
+    <div class="transcript" id="transcript-full" role="log" aria-live="polite" aria-label="Conversation, with memory"></div>
+    <div class="panel">
+      <div class="tabs" role="tablist" aria-label="Memory, with memory">
+        <button type="button" role="tab" class="tab" id="tab-full-rules" aria-controls="pane-full-rules" aria-selected="true">RULES</button>
+        <button type="button" role="tab" class="tab" id="tab-full-facts" aria-controls="pane-full-facts" aria-selected="false" tabindex="-1">FACTS</button>
+        <button type="button" role="tab" class="tab" id="tab-full-log" aria-controls="pane-full-log" aria-selected="false" tabindex="-1">LOG</button>
+        <button type="button" class="btn ghost small push" id="seen-toggle-full" aria-expanded="false" aria-controls="seen-full">What the assistant saw</button>
+      </div>
+      <div class="pane" role="tabpanel" id="pane-full-rules" aria-labelledby="tab-full-rules"></div>
+      <div class="pane" role="tabpanel" id="pane-full-facts" aria-labelledby="tab-full-facts" hidden></div>
+      <div class="pane" role="tabpanel" id="pane-full-log" aria-labelledby="tab-full-log" hidden></div>
+      <pre class="seen mono" id="seen-full" hidden></pre>
+    </div>
+    <section class="todo" id="todo-full" aria-label="To-do list, with memory">
+      <h3>To-do</h3>
+      <ul class="todo-list"></ul>
+    </section>
+  </section>
+</main>
+
+<footer class="inputbar" role="contentinfo">
+  <div class="chips" id="chips" role="group" aria-label="Example prompts"></div>
+  <form class="send" id="send" autocomplete="off">
+    <label class="sr" for="input">Message for both assistants</label>
+    <input class="input" id="input" type="text" placeholder="Type a message for both assistants" maxlength="2000">
+    <button type="submit" class="btn primary" id="send-btn">Send</button>
+    <button type="button" class="btn" id="reset">Reset</button>
+  </form>
+</footer>
+<script src="/static/app.js"></script>
+</body>
+</html>
