@@ -33,11 +33,10 @@ def test_html_has_landmarks_and_two_columns():
     cols = [a["data-column"] for a in p.attrs if "data-column" in a]
     assert cols == ["none", "full"]
     ids = {a["id"] for a in p.attrs if "id" in a}
-    for need in ("input", "send", "advance", "reflect", "reset", "chips", "todo-none", "todo-full"):
+    for need in ("input", "send", "advance", "reflect", "reset", "chips"):
         assert need in ids
     for col in ("none", "full"):
-        for tab in ("rules", "facts", "log"):
-            assert f"tab-{col}-{tab}" in ids
+        assert f"pane-{col}" in ids
     assert "/static/style.css" in (STATIC / "index.html").read_text()
     assert "/static/app.js" in (STATIC / "index.html").read_text()
 
@@ -66,7 +65,7 @@ def test_contrast_tokens():
             ("fg", "bg"), ("fg", "card"), ("fg", "muted"),
             ("muted-fg", "bg"), ("muted-fg", "card"), ("muted-fg", "muted"),
             ("accent", "bg"), ("accent", "card"), ("accent", "accent-soft"), ("muted-fg", "accent-soft"), ("fg", "accent-soft"),
-            ("on-accent", "accent"), ("danger", "bg"), ("danger", "card"), ("danger", "muted"),
+            ("on-accent", "accent"), *[(f"k{i}", bg) for i in range(6) for bg in ("bg", "card")], ("danger", "bg"), ("danger", "card"), ("danger", "muted"),
         ]
         for fg, bg in text_pairs:
             assert _ratio(t[fg], t[bg]) >= 4.5, (name, fg, bg, _ratio(t[fg], t[bg]))
@@ -85,8 +84,8 @@ def test_hook_ids_exist():
             "notice", "notice-text", "notice-close", "mode-status", "mode-text", "wipe", "wipe-status", "error-none", "error-full",
             "advance", "reflect", "theme", "chips", "send", "input", "send-btn", "reset"}
     for c in ("none", "full"):
-        need |= {f"transcript-{c}", f"seen-toggle-{c}", f"seen-{c}", f"todo-{c}", f"col-{c}"}
-        need |= {f"{k}-{c}-{n}" for k in ("tab", "pane") for n in ("rules", "facts", "log")}
+        need |= {f"transcript-{c}", f"seen-toggle-{c}", f"seen-{c}", f"col-{c}"}
+        need |= {f"pane-{c}"}
     assert need <= ids, need - ids
 
 
@@ -138,11 +137,11 @@ def test_font_sizes_meet_minimums():
     css = (STATIC / "style.css").read_text()
     assert _px(css, "body") == 15
     # UI text is at least 15px; a rule that sets no size inherits the 15px body size
-    for sel in (".btn", ".mono", ".meter-label", ".mode-status", ".btn.small", ".tab", ".chips button"):
+    for sel in (".btn", ".mono", ".meter-label", ".mode-status", ".btn.small", ".kind", ".chips button"):
         px = _px(css, sel)
         assert px is None or px >= 15, (sel, px)
     # memory text (pane, what-the-assistant-saw, entry meta, badges) is at least 14px
-    for sel in (".pane", ".seen", ".entry-time", ".badge"):
+    for sel in (".pane", ".seen", ".entry-time", ".badge", ".kind-tag"):
         px = _px(css, sel)
         assert px is not None and px >= 14, (sel, px)
     sizes = [int(n) for n in re.findall(r"font(?:-size)?:\s*(?:[\w-]+\s+)?(\d+)px", css)]

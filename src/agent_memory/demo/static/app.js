@@ -20,7 +20,13 @@ function initTheme() {
 
 // ---- T13: chat, memory panels, to-do card. Server text is only ever set with textContent. ----
 const COLS = ["none", "full"];
-const KINDS = ["rules", "facts", "log"];
+const TODO = "todo";
+const PALETTE = 6; // colour slots --k0..--k5; a kind keeps the slot it first appeared with
+const slots = new Map();
+function slot(kind) {
+  if (!slots.has(kind)) slots.set(kind, slots.size % PALETTE);
+  return slots.get(kind);
+}
 const seenNew = new Set();
 let busy = false;
 let sending = false;
@@ -75,11 +81,12 @@ function dismissNotice() {
 function stamp(iso) { return iso.slice(5, 16).replace("T", " "); }
 
 function entryNode(col, e) {
-  const row = el("div", "entry" + (e.new ? " new" : ""));
+  const row = el("div", "entry kind-row" + (e.new ? " new" : ""));
+  row.style.setProperty("--kind", `var(--k${slot(e.kind)})`);
   if (e.new && !seenNew.has(e.id)) { row.classList.add("flash"); seenNew.add(e.id); }
   const body = el("div", "entry-body");
   const head = el("div", "entry-head");
-  head.append(el("span", "entry-key", e.key));
+  head.append(el("span", "kind-tag", e.kind.toUpperCase()), el("span", "entry-key", e.key));
   if (e.new) head.append(el("span", "badge", "NEW"));
   head.append(el("time", "entry-time dim", stamp(e.created_at)));
   body.append(head);
@@ -103,55 +110,43 @@ function keepScroll(node, fill) {
   node.scrollTop = top;
 }
 
-const tabSelectors = {};
-
-// Show the tab that holds what just changed; an empty tab gives way to the first one with entries.
-function showChangedTab(c, data) {
-  const cur = KINDS.findIndex((k) => $(`#tab-${c}-${k}`).getAttribute("aria-selected") === "true");
-  const fresh = KINDS.findIndex((k) => data.entries[k].some((e) => e.new));
-  const filled = KINDS.findIndex((k) => data.entries[k].length);
-  const target = fresh >= 0 ? (data.entries[KINDS[cur]].some((e) => e.new) ? cur : fresh)
-    : (data.entries[KINDS[cur]].length ? cur : filled);
-  if (target >= 0 && target !== cur && tabSelectors[c]) tabSelectors[c](target, false);
+function todoNode(c, t) {
+  const row = el("div", "entry kind-row" + (t.done ? " done" : ""));
+  row.style.setProperty("--kind", `var(--k${slot(TODO)})`);
+  const body = el("div", "entry-body");
+  const head = el("div", "entry-head");
+  head.append(el("span", "kind-tag", TODO.toUpperCase()), el("span", "entry-key", t.done ? "done" : "open"));
+  body.append(head, el("div", "entry-text", t.text));
+  const b = el("button", "btn ghost small", "Remove");
+  b.type = "button";
+  b.setAttribute("aria-label", `Remove from the list: ${t.text}`);
+  b.addEventListener("click", () => forget(c, t.key));
+  row.append(body, b);
+  return row;
 }
 
+// The kinds are whatever the snapshot carries (they differ between memory methods), plus the to-do list.
 function renderPanel(c, data) {
-  for (const k of KINDS) {
-    const list = data.entries[k];
-    $(`#tab-${c}-${k}`).textContent = `${k.toUpperCase()} ${list.length}`;
-    const pane = $(`#pane-${c}-${k}`);
-    keepScroll(pane, () => {
-      pane.replaceChildren();
-      if (!list.length) {
-        pane.append(el("p", "empty dim", c === "none" ? "Nothing is kept for this assistant" : `No ${k} yet`));
-      } else {
-        pane.append(...list.map((e) => entryNode(c, e)));
-      }
-    });
-  }
+  const kinds = Object.keys(data.entries);
+  const all = kinds.flatMap((k) => data.entries[k].map((e) => ({ ...e, kind: k })));
+  // what just changed first, then newest first
+  all.sort((x, y) => (y.new - x.new) || y.created_at.localeCompare(x.created_at));
+  const legend = $(`#pane-${c}`).closest(".panel").querySelector(".legend");
+  legend.replaceChildren(...[...kinds.map((k) => [k, data.entries[k].length]), [TODO, data.todos.length]].map(([k, n]) => {
+    const li = el("li", "kind");
+    li.style.setProperty("--kind", `var(--k${slot(k)})`);
+    li.append(el("span", "kind-dot"), `${k} ${n}`);
+    li.firstChild.setAttribute("aria-hidden", "true");
+    return li;
+  }));
+  const pane = $(`#pane-${c}`);
+  keepScroll(pane, () => {
+    pane.replaceChildren();
+    const nodes = [...data.todos.map((t) => todoNode(c, t)), ...all.map((e) => entryNode(c, e))];
+    if (!nodes.length) pane.append(el("p", "empty dim", c === "none" ? "Nothing is kept for this assistant" : "Nothing remembered yet"));
+    else pane.append(...nodes);
+  });
   $(`#seen-${c}`).textContent = data.recalled || "(nothing was recalled)";
-  showChangedTab(c, data);
-}
-
-function renderTodos(c, data) {
-  const ul = $(`#todo-${c} .todo-list`);
-  const top = ul.scrollTop;
-  ul.replaceChildren();
-  if (!data.todos.length) {
-    ul.append(el("li", "empty dim", c === "none" ? "No memory, no list" : "Nothing on the list yet"));
-    return;
-  }
-  for (const t of data.todos) {
-    const li = el("li", "todo-item" + (t.done ? " done" : ""));
-    li.append(el("span", "todo-state mono", t.done ? "done" : "open"), el("span", "todo-text", t.text));
-    const b = el("button", "btn ghost small", "Remove");
-    b.type = "button";
-    b.setAttribute("aria-label", `Remove from the list: ${t.text}`);
-    b.addEventListener("click", () => forget(c, t.key));
-    li.append(b);
-    ul.append(li);
-  }
-  ul.scrollTop = top;
 }
 
 function render(snap) {
@@ -181,7 +176,7 @@ function render(snap) {
       chips.append(b);
     }
   }
-  for (const c of COLS) { renderPanel(c, snap.columns[c]); renderTodos(c, snap.columns[c]); }
+  for (const c of COLS) { renderPanel(c, snap.columns[c]); }
   serverBusy = snap.busy;
   setBusy(snap.busy || sending || acting);
   pollWhileBusy(snap.busy);
@@ -310,29 +305,10 @@ async function send(text) {
   }
 }
 
-// WAI-ARIA tabs: roving tabindex, arrows, Home and End; panels are hidden unless selected.
-function initTabs(c) {
-  const tabs = KINDS.map((k) => $(`#tab-${c}-${k}`));
-  const select = (i, focus) => {
-    tabs.forEach((t, j) => {
-      t.setAttribute("aria-selected", String(i === j));
-      t.tabIndex = i === j ? 0 : -1;
-      $(`#${t.getAttribute("aria-controls")}`).hidden = i !== j;
-    });
-    if (focus) tabs[i].focus();
-  };
-  tabSelectors[c] = select;
-  tabs.forEach((t, i) => {
-    t.addEventListener("click", () => select(i, false));
-    t.addEventListener("keydown", (ev) => {
-      const next = { ArrowRight: (i + 1) % 3, ArrowLeft: (i + 2) % 3, Home: 0, End: 2 }[ev.key];
-      if (next === undefined) return;
-      ev.preventDefault();
-      select(next, true);
-    });
-  });
+// The "what the assistant saw" overlay: a disclosure button, Escape closes it.
+function initSeen(c) {
   const toggle = $(`#seen-toggle-${c}`);
-  // Narrow windows get a short visible label so the tabs and the toggle fit on one row; the accessible
+  // Narrow windows get a short visible label so the legend and the toggle fit on one row; the accessible
   // name stays the full sentence and aria-expanded carries the state.
   const compact = window.matchMedia("(max-width: 1279px)");
   const label = () => {
@@ -417,6 +393,6 @@ $("#notice-close").addEventListener("click", dismissNotice);
 document.addEventListener("keydown", (ev) => {
   if (ev.key === "Escape" && !ev.defaultPrevented && !$("#notice").hidden) dismissNotice();
 });
-COLS.forEach(initTabs);
+COLS.forEach(initSeen);
 $("#send").addEventListener("submit", (ev) => { ev.preventDefault(); send($("#input").value); });
 api("/api/state").then(render).catch((e) => showNotice(e.message));

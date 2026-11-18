@@ -13,6 +13,12 @@
   --on-accent: #1B1B1B;
   --danger: #FFAEA7;
   --ring: #F5F5F5;
+  --k0: #A1CAFF;
+  --k1: #90CA90;
+  --k2: #EAACF8;
+  --k3: #FFB37E;
+  --k4: #90D7C8;
+  --k5: #FFA9CA;
   --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 20px; --s6: 24px; --s8: 32px;
   --radius: 10px;
   --radius-card: 12px;
@@ -34,6 +40,12 @@
   --on-accent: #FFFFFF;
   --danger: #A81F25;
   --ring: #1B1B1B;
+  --k0: #0067CE;
+  --k1: #2F7D33;
+  --k2: #5C0E6C;
+  --k3: #622700;
+  --k4: #00463D;
+  --k5: #70003F;
   --shadow: 0 2px 4px rgba(0, 0, 0, 0.05), 0 4px 8px rgba(0, 0, 0, 0.1);
   color-scheme: light;
 }
@@ -84,13 +96,13 @@ p { margin: 0; }
 #theme { display: inline-flex; align-items: center; white-space: nowrap; }
 
 /* Buttons */
-.btn, .seg-btn, .tab {
+.btn, .seg-btn {
   font: inherit; color: var(--fg); background: var(--card);
   border: 1px solid var(--outline); border-radius: var(--radius);
   padding: var(--s2) var(--s4); min-height: 36px; cursor: pointer;
   transition: background-color 150ms ease, border-color 150ms ease;
 }
-.btn:hover, .seg-btn:hover, .tab:hover { background: var(--muted); }
+.btn:hover, .seg-btn:hover { background: var(--muted); }
 .btn.primary { background: var(--fg); color: var(--bg); border-color: var(--fg); }
 .btn.primary:hover { opacity: 0.9; }
 /* ghost buttons stay recognisable as controls: underlined text, a fill on hover, the shared focus ring */
@@ -132,9 +144,6 @@ p { margin: 0; }
 /* Memory panel: monospace for memory text */
 .panel { position: relative; display: flex; flex-direction: column; flex: 0 1 230px; min-height: 120px; border: 1px solid var(--hairline); border-radius: var(--radius-card); background: var(--bg); }
 .tabs { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s2); padding: var(--s2); border-bottom: 1px solid var(--hairline); }
-.tab { white-space: nowrap; min-height: 32px; padding: var(--s1) var(--s3); font-size: 15px; letter-spacing: 0.06em; border-color: transparent; background: transparent; color: var(--muted-fg); }
-.tab[aria-selected="true"] { color: var(--fg); border-color: var(--hairline); background: var(--muted); }
-.tablist { display: flex; gap: var(--s1); }
 .pane { flex: 1; min-height: 0; overflow-y: auto; padding: var(--s2) var(--s3); font: 14px/1.5 var(--mono); }
 .pane[hidden], .seen[hidden] { display: none; }
 .entry { display: flex; align-items: flex-start; gap: var(--s2); padding: var(--s1) var(--s2); border-bottom: 1px solid var(--hairline); border-left: 3px solid transparent; }
@@ -154,15 +163,6 @@ p { margin: 0; }
 .seen { font-size: 14px; position: absolute; z-index: 2; top: 45px; left: 0; right: 0; bottom: 0; margin: 0; overflow: auto; padding: var(--s2) var(--s3); background: var(--card); border-top: 1px solid var(--hairline); border-radius: 0 0 var(--radius-card) var(--radius-card); white-space: pre-wrap; }
 @keyframes flash { from { background: var(--accent); color: var(--on-accent); } }
 
-/* To-do card */
-.todo { display: flex; flex-direction: column; flex: 0 1 96px; min-height: 96px; border: 1px solid var(--hairline); border-radius: var(--radius-card); padding: var(--s3) var(--s4); background: var(--bg); }
-.todo h3 { font-size: 15px; margin-bottom: var(--s1); }
-.todo-item { display: flex; align-items: center; gap: var(--s2); padding: var(--s1) 0; }
-.todo-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-.todo-state { color: var(--muted-fg); width: 40px; }
-.todo-item.done .todo-text { text-decoration: line-through; color: var(--muted-fg); }
-.todo-list { margin: 0; padding: 0; list-style: none; flex: 1; min-height: 0; overflow-y: auto; }
-
 /* Input bar */
 .inputbar { padding: var(--s3) var(--s6) var(--s4); border-top: 1px solid var(--hairline); display: flex; flex-direction: column; gap: var(--s2); }
 .chips { display: flex; gap: var(--s2); flex-wrap: wrap; }
@@ -179,16 +179,14 @@ p { margin: 0; }
 /* Short windows (1100x800 with a banner): give the memory pane the room, not the transcript or the to-do card */
 @media (max-height: 850px) {
   .transcript { min-height: 130px; }
-  .todo { min-height: 80px; padding: var(--s2) var(--s4); }
   .col { gap: var(--s2); }
 }
 
 /* With memory: chat on the left, memory and to-do on the right, so what changed is next to what was said */
-#col-full { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr) auto; column-gap: var(--s4); row-gap: var(--s3); }
+#col-full { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr); column-gap: var(--s4); row-gap: var(--s3); }
 #col-full .col-head, #col-full .col-error { grid-column: 1 / -1; }
-#col-full .transcript { grid-column: 1; grid-row: 3 / 5; }
+#col-full .transcript { grid-column: 1; grid-row: 3; }
 #col-full .panel { grid-column: 2; grid-row: 3; flex: none; }
-#col-full .todo { grid-column: 2; grid-row: 4; flex: none; }
 
 /* Composer: centred, roomy, like a chat app */
 .inputbar { align-items: center; }
@@ -198,4 +196,24 @@ p { margin: 0; }
 /* No memory: its panel and to-do are empty by design, so they stay short and the chat gets the room */
 #col-none .panel { flex: none; min-height: 0; }
 #col-none .pane { flex: none; min-height: 0; max-height: 96px; }
-#col-none .todo { flex: none; min-height: 0; }
+
+/* One memory list, kinds told apart by colour (and by the word, so colour is not the only cue) */
+.legend { display: flex; gap: var(--s4); margin: 0; padding: 0 var(--s2); list-style: none; }
+.kind { display: inline-flex; align-items: center; gap: var(--s2); font-size: 15px; color: var(--muted-fg); }
+.kind-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--kind, var(--muted-fg)); }
+.entry.kind-row { border-left-color: var(--kind); }
+.entry.done .entry-text { text-decoration: line-through; color: var(--muted-fg); }
+.kind-tag { font-size: 14px; letter-spacing: 0.06em; color: var(--kind); }
+.entry.new .kind-tag { color: var(--accent); }
+
+/* Buttons: soft shadow, clear hover and press, segmented Live/Replay control */
+.btn, .seg-btn { font-weight: 500; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18); }
+.btn:hover, .seg-btn:hover { border-color: var(--fg); }
+.btn:active, .seg-btn:active { transform: translateY(1px); box-shadow: none; }
+.btn.ghost { box-shadow: none; font-weight: 400; }
+.btn.primary { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3); }
+.seg { padding: 3px; gap: 2px; background: var(--muted); border-radius: calc(var(--radius) + 3px); }
+.seg-btn, .seg-btn:first-child, .seg-btn:last-child { border: 0; border-radius: var(--radius); margin: 0; background: transparent; box-shadow: none; min-height: 32px; padding: var(--s1) var(--s4); }
+.seg-btn:hover { background: transparent; }
+.seg-btn[aria-pressed="true"] { background: var(--fg); color: var(--bg); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3); font-weight: 600; }
+.seg-btn[aria-pressed="false"] { color: var(--muted-fg); }

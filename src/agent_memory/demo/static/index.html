@@ -5,9 +5,8 @@ Data: [data-column="none"|"full"] on #col-none / #col-full (the column keys of t
 Top bar: #mode-live, #mode-replay (aria-pressed), #tokens-cap (top bar, the per-column cap),
   #sim-date, #advance, #reflect, #theme (constant name "Light theme", aria-pressed = light is on, decorative svg), #mode-status (.dot + #mode-text),
   #notice (live region, hidden until used; #notice-text, #notice-close), #error-<c> per column (snapshot error).
-Per column <c> in none|full: #transcript-<c> (holds .msg and .msg.user), #tab-<c>-rules|facts|log,
-  #pane-<c>-rules|facts|log (holds .entry and .entry.new), #seen-toggle-<c>, #seen-<c>,
-  #todo-<c> with a .todo-list ul, #tokens-<c> (this column's token use, in its header).
+Per column <c> in none|full: #transcript-<c> (holds .msg and .msg.user), #legend-<c> is not needed: .legend is filled from the snapshot kinds. #pane-<c> (one list of every kind incl. to-dos, newest first; holds .entry and .entry.new), #seen-toggle-<c>, #seen-<c>,
+  #tokens-<c> (this column's token use, in its header).
 Input bar: #chips (T13 fills it with three prompt chips), #send (form), #input, #send-btn, #reset, #wipe (two-step confirm), #wipe-status.
 -->
 <html lang="en" data-theme="dark">
@@ -54,22 +53,12 @@ Input bar: #chips (T13 fills it with three prompt chips), #send (form), #input, 
     <p class="col-error" id="error-none" role="status" hidden></p>
     <div class="transcript" id="transcript-none" role="log" aria-live="polite" aria-label="Conversation, no memory"></div>
     <div class="panel">
-      <div class="tabs"><div class="tablist" role="tablist" aria-label="Memory, no memory">
-        <button type="button" role="tab" class="tab" id="tab-none-rules" aria-controls="pane-none-rules" aria-selected="true">RULES</button>
-        <button type="button" role="tab" class="tab" id="tab-none-facts" aria-controls="pane-none-facts" aria-selected="false" tabindex="-1">FACTS</button>
-        <button type="button" role="tab" class="tab" id="tab-none-log" aria-controls="pane-none-log" aria-selected="false" tabindex="-1">LOG</button>
-      </div>
+      <div class="tabs"><ul class="legend" aria-label="Memory kinds, no memory"></ul>
       <button type="button" class="btn ghost small push" id="seen-toggle-none" aria-expanded="false" aria-controls="seen-none">What the assistant saw</button>
       </div>
-      <div class="pane" role="tabpanel" tabindex="0" id="pane-none-rules" aria-labelledby="tab-none-rules"></div>
-      <div class="pane" role="tabpanel" tabindex="0" id="pane-none-facts" aria-labelledby="tab-none-facts" hidden></div>
-      <div class="pane" role="tabpanel" tabindex="0" id="pane-none-log" aria-labelledby="tab-none-log" hidden></div>
+      <div class="pane" role="region" tabindex="0" id="pane-none" aria-label="Memory entries, no memory"></div>
       <pre class="seen mono" id="seen-none" hidden></pre>
     </div>
-    <section class="todo" id="todo-none" aria-label="To-do list, no memory">
-      <h3>To-do</h3>
-      <ul class="todo-list"></ul>
-    </section>
   </section>
 
   <section class="col" id="col-full" data-column="full" aria-labelledby="h-full">
@@ -81,22 +70,12 @@ Input bar: #chips (T13 fills it with three prompt chips), #send (form), #input, 
     <p class="col-error" id="error-full" role="status" hidden></p>
     <div class="transcript" id="transcript-full" role="log" aria-live="polite" aria-label="Conversation, with memory"></div>
     <div class="panel">
-      <div class="tabs"><div class="tablist" role="tablist" aria-label="Memory, with memory">
-        <button type="button" role="tab" class="tab" id="tab-full-rules" aria-controls="pane-full-rules" aria-selected="true">RULES</button>
-        <button type="button" role="tab" class="tab" id="tab-full-facts" aria-controls="pane-full-facts" aria-selected="false" tabindex="-1">FACTS</button>
-        <button type="button" role="tab" class="tab" id="tab-full-log" aria-controls="pane-full-log" aria-selected="false" tabindex="-1">LOG</button>
-      </div>
+      <div class="tabs"><ul class="legend" aria-label="Memory kinds, with memory"></ul>
       <button type="button" class="btn ghost small push" id="seen-toggle-full" aria-expanded="false" aria-controls="seen-full">What the assistant saw</button>
       </div>
-      <div class="pane" role="tabpanel" tabindex="0" id="pane-full-rules" aria-labelledby="tab-full-rules"></div>
-      <div class="pane" role="tabpanel" tabindex="0" id="pane-full-facts" aria-labelledby="tab-full-facts" hidden></div>
-      <div class="pane" role="tabpanel" tabindex="0" id="pane-full-log" aria-labelledby="tab-full-log" hidden></div>
+      <div class="pane" role="region" tabindex="0" id="pane-full" aria-label="Memory entries, with memory"></div>
       <pre class="seen mono" id="seen-full" hidden></pre>
     </div>
-    <section class="todo" id="todo-full" aria-label="To-do list, with memory">
-      <h3>To-do</h3>
-      <ul class="todo-list"></ul>
-    </section>
   </section>
 </main>
 
