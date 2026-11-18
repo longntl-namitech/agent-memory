@@ -30,9 +30,9 @@ def test_parse_drops_malformed_actions():
 
 def test_add_then_done_keeps_one_item(tmp_path):
     s = Store(tmp_path)
-    assert add(s, "Buy milk") == ["todo-buy-milk"]
+    assert add(s, "Buy milk") == ["todo-buy-milk-9799a9"]
     eid = s.facts()[0].id
-    assert apply_actions(s, [{"action": "done", "text": "Buy milk"}], LATER) == ["todo-buy-milk"]
+    assert apply_actions(s, [{"action": "done", "text": "Buy milk"}], LATER) == ["todo-buy-milk-9799a9"]
     assert len(s.facts()) == 1 and s.facts()[0].id == eid
     assert [(t.text, t.done) for t in todos(s)] == [("Buy milk", True)]
 
@@ -41,7 +41,7 @@ def test_remove_archives_and_card_updates(tmp_path):
     s = Store(tmp_path)
     add(s, "Buy milk")
     eid = s.facts()[0].id
-    assert apply_actions(s, [{"action": "remove", "text": "buy milk"}], LATER) == ["todo-buy-milk"]
+    assert apply_actions(s, [{"action": "remove", "text": "buy milk"}], LATER) == ["todo-buy-milk-9799a9"]
     assert todos(s) == [] and s.facts() == []
     assert any(e.id == eid and e.status == "archived" for es in s._entries.values() for e in es)
 
@@ -50,7 +50,7 @@ def test_done_matches_slightly_different_wording_when_unique(tmp_path):
     s = Store(tmp_path)
     add(s, "Buy milk")
     add(s, "Call mom")
-    assert apply_actions(s, [{"action": "done", "text": "milk"}], LATER) == ["todo-buy-milk"]
+    assert apply_actions(s, [{"action": "done", "text": "milk"}], LATER) == ["todo-buy-milk-9799a9"]
     assert [t.done for t in todos(s)] == [True, False]
 
 
