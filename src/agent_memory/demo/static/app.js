@@ -127,6 +127,7 @@ function todoNode(c, t) {
 
 // The kinds are whatever the snapshot carries (they differ between memory methods), plus the to-do list.
 function renderPanel(c, data) {
+  if (!document.getElementById(`pane-${c}`)) return; // the no-memory column shows no memory
   const kinds = Object.keys(data.entries);
   const all = kinds.flatMap((k) => data.entries[k].map((e) => ({ ...e, kind: k })));
   // what just changed first, then newest first
@@ -206,7 +207,7 @@ function pollWhileBusy(isBusy) {
 
 function setBusy(v) {
   busy = v;
-  for (const id of ["send-btn", "advance", "reflect", "reset", "wipe"]) $(`#${id}`).disabled = v;
+  for (const id of ["send-btn", "advance", "reflect", "new-chat", "reset", "wipe"]) $(`#${id}`).disabled = v;
   // the active mode button is disabled too, so clicking it cannot do anything
   $("#mode-live").disabled = v || currentMode === "live";
   $("#mode-replay").disabled = v || currentMode === "replay";
@@ -307,6 +308,7 @@ async function send(text) {
 
 // The "what the assistant saw" overlay: a disclosure button, Escape closes it.
 function initSeen(c) {
+  if (!document.getElementById(`seen-toggle-${c}`)) return;
   const toggle = $(`#seen-toggle-${c}`);
   // Narrow windows get a short visible label so the legend and the toggle fit on one row; the accessible
   // name stays the full sentence and aria-expanded carries the state.
@@ -376,6 +378,8 @@ $("#mode-replay").addEventListener("click", () => act("/api/mode", { mode: "repl
 $("#wipe").addEventListener("blur", disarmWipe);
 $("#advance").addEventListener("click", () => act("/api/advance"));
 $("#reflect").addEventListener("click", () => act("/api/reflect"));
+// The assistants only see the current message plus memory, so clearing the chat is faithful: memory stays.
+$("#new-chat").addEventListener("click", () => { clearTranscripts(); $("#input").focus(); });
 $("#reset").addEventListener("click", () => act("/api/reset", undefined, clearTranscripts));
 $("#wipe").addEventListener("click", () => {
   if (wipeTimer === null) {  // first click arms, a second click within 5 seconds wipes; no browser dialogs

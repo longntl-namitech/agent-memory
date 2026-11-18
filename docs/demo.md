@@ -44,7 +44,7 @@ In the warm-up run the full column's reply to prompt 2 was "I don't know - your 
 
 Optional second act: send `This week I'm on a diet.`, then press "Advance a day" seven times. The LOG lines expire and are archived after seven days while the facts and the to-do list stay. "Run Friday reflect" makes one model call (it is not in the warm-up cache, so in replay that column shows the miss message) that reads the active log lines and may write up to 3 rules from them, archiving the log lines it used.
 
-Each memory entry has a button to forget it. "Reset" returns both columns to the start (date back to Monday 2026-01-05).
+Each memory entry has a button to forget it. "New chat" clears the conversation and keeps memory, to show the assistant still knows you. "Reset memory" returns both columns to the start (memory emptied, date back to Monday 2026-01-05).
 
 ## Live, replay and failover
 
@@ -58,7 +58,7 @@ Each memory entry has a button to forget it. "Reset" returns both columns to the
 - Live call failing on stage: let the automatic switch happen, or press "Replay" before it fails; then use the three example prompts.
 - Replay says "Not in the rehearsed script": use the example prompts, or run the warm-up again (the model or the data folder may have changed).
 - Token cap reached: restart with a higher `--max-tokens`, or switch to replay.
-- Start over: "Reset" for the memory, "Wipe all data" for everything. Wiping deletes only the demo's own folders in the data folder (`stores/`, both LLM caches, `embedding-cache/`), including the warm-up cache, so run `--warmup` again before the next replay.
+- Start over: "Reset memory" for the memory, "Wipe all data" for everything. Wiping deletes only the demo's own folders in the data folder (`stores/`, both LLM caches, `embedding-cache/`), including the warm-up cache, so run `--warmup` again before the next replay.
 
 ## Rehearsal numbers
 

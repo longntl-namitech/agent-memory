@@ -193,9 +193,6 @@ p { margin: 0; }
 .chips, .send { width: 100%; max-width: 1240px; }
 .input { min-height: 48px; padding: var(--s3) var(--s4); border-radius: 14px; font-size: 17px; }
 
-/* No memory: its panel and to-do are empty by design, so they stay short and the chat gets the room */
-#col-none .panel { flex: none; min-height: 0; }
-#col-none .pane { flex: none; min-height: 0; max-height: 96px; }
 
 /* One memory list, kinds told apart by colour (and by the word, so colour is not the only cue) */
 .legend { display: flex; gap: var(--s4); margin: 0; padding: 0 var(--s2); list-style: none; }
@@ -217,3 +214,8 @@ p { margin: 0; }
 .seg-btn:hover { background: transparent; }
 .seg-btn[aria-pressed="true"] { background: var(--fg); color: var(--bg); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3); font-weight: 600; }
 .seg-btn[aria-pressed="false"] { color: var(--muted-fg); }
+
+/* "What the assistant saw" takes the list's place under the header, so it never covers its own toggle */
+.panel:has(.seen:not([hidden])) .pane { display: none; }
+.seen { position: static; flex: 1; min-height: 0; overflow: auto; margin: 0; }
+.seen[hidden] { display: none; }

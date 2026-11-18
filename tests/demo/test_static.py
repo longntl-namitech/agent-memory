@@ -35,8 +35,7 @@ def test_html_has_landmarks_and_two_columns():
     ids = {a["id"] for a in p.attrs if "id" in a}
     for need in ("input", "send", "advance", "reflect", "reset", "chips"):
         assert need in ids
-    for col in ("none", "full"):
-        assert f"pane-{col}" in ids
+    assert "pane-full" in ids and "pane-none" not in ids  # the no-memory column has no memory panel
     assert "/static/style.css" in (STATIC / "index.html").read_text()
     assert "/static/app.js" in (STATIC / "index.html").read_text()
 
@@ -82,10 +81,10 @@ def test_hook_ids_exist():
     ids = {a["id"] for a in p.attrs if "id" in a}
     need = {"mode-live", "mode-replay", "tokens-none", "tokens-full", "tokens-cap", "sim-date",
             "notice", "notice-text", "notice-close", "mode-status", "mode-text", "wipe", "wipe-status", "error-none", "error-full",
-            "advance", "reflect", "theme", "chips", "send", "input", "send-btn", "reset"}
+            "advance", "reflect", "theme", "chips", "send", "input", "send-btn", "new-chat", "reset"}
     for c in ("none", "full"):
-        need |= {f"transcript-{c}", f"seen-toggle-{c}", f"seen-{c}", f"col-{c}"}
-        need |= {f"pane-{c}"}
+        need |= {f"transcript-{c}", f"col-{c}"}
+    need |= {"seen-toggle-full", "seen-full", "pane-full"}
     assert need <= ids, need - ids
 
 
