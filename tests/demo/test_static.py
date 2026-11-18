@@ -5,13 +5,13 @@ from html.parser import HTMLParser
 from pathlib import Path
 
 STATIC = Path(__file__).resolve().parents[2] / "src" / "agent_memory" / "demo" / "static"
-FILES = ("index.html", "style.css", "app.js")
+FILES = ("index.html", "style.css", "app.js", "theme.js")
 
 
 def test_no_external_urls():
     for name in FILES:
         text = (STATIC / name).read_text()
-        for bad in ("http://", "https://", "//cdn"):
+        for bad in ("http://", "https://", "//cdn", "@import", "url(//", "//fonts"):
             assert bad not in text, f"{name} contains {bad}"
 
 
@@ -66,11 +66,24 @@ def test_contrast_tokens():
             ("fg", "bg"), ("fg", "card"), ("fg", "muted"),
             ("muted-fg", "bg"), ("muted-fg", "card"), ("muted-fg", "muted"),
             ("accent", "bg"), ("accent", "card"), ("accent", "accent-soft"),
-            ("on-accent", "accent"), ("danger", "bg"), ("danger", "card"),
+            ("on-accent", "accent"), ("danger", "bg"), ("danger", "card"), ("danger", "muted"),
         ]
         for fg, bg in text_pairs:
             assert _ratio(t[fg], t[bg]) >= 4.5, (name, fg, bg, _ratio(t[fg], t[bg]))
-        for bg in ("bg", "card"):
+        # Disabled controls (.btn:disabled, opacity .5) are exempt from WCAG 1.4.3 and 1.4.11.
+        for bg in ("bg", "card", "muted"):
             assert _ratio(t["outline"], t[bg]) >= 3.0, (name, "outline", bg)
             assert _ratio(t["ring"], t[bg]) >= 3.0, (name, "ring", bg)
         assert _ratio(t["hairline"], t["bg"]) < _ratio(t["outline"], t["bg"])
+
+
+def test_hook_ids_exist():
+    p = _Ids()
+    p.feed((STATIC / "index.html").read_text())
+    ids = {a["id"] for a in p.attrs if "id" in a}
+    need = {"mode-live", "mode-replay", "tokens-none", "tokens-full", "tokens-cap", "sim-date",
+            "notice", "advance", "reflect", "theme", "chips", "send", "input", "send-btn", "reset"}
+    for c in ("none", "full"):
+        need |= {f"transcript-{c}", f"seen-toggle-{c}", f"seen-{c}", f"todo-{c}", f"col-{c}"}
+        need |= {f"{k}-{c}-{n}" for k in ("tab", "pane") for n in ("rules", "facts", "log")}
+    assert need <= ids, need - ids

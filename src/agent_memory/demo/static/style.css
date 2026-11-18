@@ -5,7 +5,7 @@
   --muted: #272F42;
   --fg: #F8FAFC;
   --muted-fg: #94A3B8;
-  --outline: #64748B;
+  --outline: #7C8BA1;
   --hairline: #2A3346;
   --accent: #22C55E;
   --accent-soft: #14301F;
@@ -54,10 +54,11 @@ p { margin: 0; }
 
 /* Top bar */
 .topbar {
-  display: flex; align-items: center; gap: var(--s4);
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s4);
   padding: var(--s3) var(--s6); border-bottom: 1px solid var(--hairline); background: var(--bg);
 }
-.brand { font-size: 20px; }
+.brand { font-size: 20px; white-space: nowrap; }
+.topbar .btn, .seg-btn, .meter, #sim-date { white-space: nowrap; flex-shrink: 0; }
 .spacer { flex: 1; }
 .meter { display: flex; align-items: baseline; gap: var(--s3); }
 .meter-label { color: var(--muted-fg); font-size: 13px; }
@@ -75,7 +76,7 @@ p { margin: 0; }
 .btn.primary:hover { opacity: 0.9; }
 .btn.ghost { background: transparent; border-color: transparent; color: var(--muted-fg); }
 .btn.ghost:hover { color: var(--fg); background: var(--muted); }
-.btn.small { min-height: 28px; padding: var(--s1) var(--s2); font-size: 13px; }
+.btn.small { white-space: nowrap; min-height: 28px; padding: var(--s1) var(--s2); font-size: 13px; }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .seg { display: inline-flex; }
 .seg-btn { border-radius: 0; }
@@ -103,10 +104,10 @@ p { margin: 0; }
 
 /* Memory panel: monospace for memory text */
 .panel { border: 1px solid var(--hairline); border-radius: var(--radius); background: var(--bg); }
-.tabs { display: flex; align-items: center; gap: var(--s1); padding: var(--s2); border-bottom: 1px solid var(--hairline); }
+.tabs { display: flex; align-items: center; justify-content: space-between; gap: var(--s2); padding: var(--s2); border-bottom: 1px solid var(--hairline); }
 .tab { min-height: 28px; padding: var(--s1) var(--s3); font-size: 12px; letter-spacing: 0.06em; border-color: transparent; background: transparent; color: var(--muted-fg); }
 .tab[aria-selected="true"] { color: var(--fg); border-color: var(--outline); background: var(--card); }
-.push { margin-left: auto; }
+.tablist { display: flex; gap: var(--s1); }
 .pane { height: 150px; overflow-y: auto; padding: var(--s2) var(--s3); font: 13px/1.5 var(--mono); }
 .pane[hidden], .seen[hidden] { display: none; }
 .entry { display: flex; gap: var(--s2); padding: var(--s1) 0; border-bottom: 1px solid var(--hairline); }
