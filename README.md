@@ -76,6 +76,18 @@ On an empty store directory this prints only the two header lines.
 
 </details>
 
+## Demo
+
+A local web page that shows two assistants answering the same messages side by side, one with no memory and one with the lab's full memory, so you can watch the memory change. It is a toy personal assistant for a fictional user, not part of the measurements. Live mode calls the model (token cap per column, default 100,000); replay mode serves a rehearsed session from a cache and works offline.
+
+```bash
+uv run agent-memory demo --estimate-only   # no network call: prints the token estimate and the data folder
+uv run agent-memory demo --warmup          # calls the model once and costs tokens: fills the replay cache
+uv run agent-memory demo                   # serves http://127.0.0.1:8765/ (live mode; --mode replay for offline)
+```
+
+Live mode and `--warmup` need `OPENAI_API_KEY`, `EMBEDDING_BASE_URL` and `EMBEDDING_MODEL` in the environment. The estimate (3,000 tokens per scripted turn) is a placeholder until a real warm-up is measured. Privacy: in live mode the text you type is sent to the configured LLM and embedding providers. Everything the demo stores is in `.demo/` (gitignored); the "Wipe all data" button deletes it. See [docs/demo.md](docs/demo.md) for the pitch checklist.
+
 ## Methods
 
 Each method has its own README with constants, behavior and an example.

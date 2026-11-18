@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- `agent-memory demo`: a local chat demo (standard-library server, one static page) with a no-memory assistant and a full-memory assistant side by side, to-do list, memory panels, time controls, live and replay modes with automatic failover, a token cap per column and a wipe button. Flags: `--port`, `--max-tokens`, `--mode`, `--data-dir`, `--warmup`, `--estimate-only`. Docs in `docs/demo.md`.
+
 ## v0.1.0 - 2026-11-17
 
 ### Fixed
