@@ -82,7 +82,7 @@ A local web page that shows two assistants answering the same messages side by s
 
 <p align="center"><a href="docs/assets/demo.webm"><img src="docs/assets/demo.gif" alt="Walkthrough of the demo: tell the assistant who you are, change a fact, start a new chat, and see what the assistant saw" width="100%"></a></p>
 
-A 65-second walkthrough. Click it for the full-size video ([docs/assets/demo.webm](docs/assets/demo.webm)): tell it who you are, change a fact, start a new chat, and see what the assistant saw.
+A 43-second walkthrough. Click it for the full-size video ([docs/assets/demo.webm](docs/assets/demo.webm)): tell it who you are, change a fact, start a new chat, and see what the assistant saw.
 
 ```bash
 uv run agent-memory demo --estimate-only   # no network call: prints the token estimate and the data folder
