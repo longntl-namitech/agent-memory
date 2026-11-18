@@ -80,9 +80,9 @@ On an empty store directory this prints only the two header lines.
 
 A local web page that shows two assistants answering the same messages side by side, one with no memory and one with the lab's full memory, so you can watch the memory change. It is a toy personal assistant for a fictional user, not part of the measurements. Live mode calls the model (token cap per column, default 100,000); replay mode serves a rehearsed session from a cache and works offline.
 
-<video src="docs/assets/demo.webm" controls muted width="100%"></video>
+<p align="center"><a href="docs/assets/demo.webm"><img src="docs/assets/demo.gif" alt="Walkthrough of the demo: tell the assistant who you are, change a fact, start a new chat, and see what the assistant saw" width="100%"></a></p>
 
-A 65-second walkthrough ([docs/assets/demo.webm](docs/assets/demo.webm)): tell it who you are, change a fact, start a new chat, and see what the assistant saw.
+A 65-second walkthrough. Click it for the full-size video ([docs/assets/demo.webm](docs/assets/demo.webm)): tell it who you are, change a fact, start a new chat, and see what the assistant saw.
 
 ```bash
 uv run agent-memory demo --estimate-only   # no network call: prints the token estimate and the data folder
