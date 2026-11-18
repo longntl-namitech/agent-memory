@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 420" width="100%" role="img" aria-labelledby="t d">
   <title id="t">The agent-memory pipeline</title>
-  <desc id="d">The six stage kinds, in the tweet's order: write, sort, recall, reflect, forget, reflexion (drawn as five boxes: reflect and forget share one). In a run, each task does recall, answer, an optional reflexion retry, then write and forget; reflect runs on Fridays. The store has three parts: RULES, FACTS and LOG. Recall reads the store into the agent prompt.</desc>
+  <desc id="d">The six stage kinds, in pipeline order: write, sort, recall, reflect, forget, reflexion (drawn as five boxes: reflect and forget share one). In a run, each task does recall, answer, an optional reflexion retry, then write and forget; reflect runs on Fridays. The store has three parts: RULES, FACTS and LOG. Recall reads the store into the agent prompt.</desc>
   <style>
     svg { color: #1f2328; }
     .bg { fill: #ffffff; }

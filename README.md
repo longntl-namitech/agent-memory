@@ -2,7 +2,7 @@
 
 # agent-memory
 
-**A private lab that measures agent-memory techniques by config-driven ablation.**
+**An assistant agent with long-term memory, measured by config-driven ablation.**
 
 ![python](https://img.shields.io/badge/python-3.11%2B-blue) ![license](https://img.shields.io/badge/license-MIT-green) ![version](https://img.shields.io/badge/version-0.1.0-lightgrey) ![status](https://img.shields.io/badge/results-first%20runs-orange)
 
@@ -10,7 +10,7 @@
 
 </div>
 
-Each technique from the tweet "Memory Engineering: How to Build an Agent That Gets Smarter Every Day" (@distortgeekin, 2026-11-16) is a runnable stage in its own folder: write, sort, recall, reflect, forget, reflexion. Stages are switched on and off by TOML config, so the same code gives baselines, a build-up chain and leave-one-out runs. The goal is to find out, with our own measurements, which parts of the recipe help. It is a lab to read and run, not a memory service or an SDK.
+An assistant agent with long-term memory. Instead of keeping the whole history in the prompt, it writes down only what is worth keeping after each task and recalls only what the next task needs. Each memory technique is a runnable stage in its own folder: write, sort, recall, reflect, forget, reflexion. Stages are switched on and off by TOML config, so the same code gives baselines, a build-up chain and leave-one-out runs, and every stage is measured on two evals to see which parts help.
 
 | At a glance | |
 |---|---|
@@ -21,9 +21,9 @@ Each technique from the tweet "Memory Engineering: How to Build an Agent That Ge
 
 ## Pipeline
 
-<p align="center"><img src="docs/diagrams/pipeline.svg" alt="The six stage kinds, in the tweet's order: write, sort, recall, reflect, forget, reflexion (drawn as five boxes: reflect and forget share one). In a run, each task does recall, answer, an optional reflexion retry, then write and forget; reflect runs on Fridays. The store holds RULES, FACTS and LOG." width="100%"></p>
+<p align="center"><img src="docs/diagrams/pipeline.svg" alt="The six stage kinds, in pipeline order: write, sort, recall, reflect, forget, reflexion (drawn as five boxes: reflect and forget share one). In a run, each task does recall, answer, an optional reflexion retry, then write and forget; reflect runs on Fridays. The store holds RULES, FACTS and LOG." width="100%"></p>
 
-The six stage kinds, in the tweet's order: write, sort, recall, reflect, forget, reflexion (drawn as five boxes: reflect and forget share one). In a run, each task does recall, answer, an optional reflexion retry, then write and forget; reflect runs on Fridays. The diagram shows stage kinds, not run order.
+The six stage kinds, in pipeline order: write, sort, recall, reflect, forget, reflexion (drawn as five boxes: reflect and forget share one). In a run, each task does recall, answer, an optional reflexion retry, then write and forget; reflect runs on Fridays. The diagram shows stage kinds, not run order.
 
 Every stage-based memory uses the same store: RULES (always loaded, 20 lines at most), FACTS (one entry per key, newest wins) and LOG (dated events, searched only when needed). Every stage gets `now` from outside; nothing in `core/` or `methods/` reads system time.
 
@@ -78,7 +78,7 @@ On an empty store directory this prints only the two header lines.
 
 ## Demo
 
-A local web page that shows two assistants answering the same messages side by side, one with no memory and one with the lab's full memory, so you can watch the memory change. It is a toy personal assistant for a fictional user, not part of the measurements. Live mode calls the model (token cap per column, default 100,000); replay mode serves a rehearsed session from a cache and works offline.
+A local web page that shows two assistants answering the same messages side by side, one with no memory and one with the full memory, so you can watch the memory change. It is a toy personal assistant for a fictional user, not part of the measurements. Live mode calls the model (token cap per column, default 100,000); replay mode serves a rehearsed session from a cache and works offline.
 
 <p align="center"><a href="docs/assets/demo.webm"><img src="docs/assets/demo.gif" alt="Walkthrough of the demo: tell the assistant who you are, change a fact, start a new chat, and see what the assistant saw" width="100%"></a></p>
 
@@ -137,7 +137,7 @@ First measured runs, all on 2026-11-17 with `gpt-5.4-nano`, seed 7. Each config 
 
 ### Simulation (40 tasks, 4 weeks)
 
-All 14 lab configs and the 2 Hermes configs ran all 40 tasks (no PARTIAL result).
+All 14 memory configs and the 2 Hermes configs ran all 40 tasks (no PARTIAL result).
 
 | Config | Corrections w1/w2/w3/w4 | First-attempt failures w1/w2/w3/w4 | Stale-fact errors (total) | Tokens |
 |---|---|---|---|---|
@@ -186,7 +186,7 @@ All six `lme_*` configs ran on the 8-question subset. `lme_b1_write_filter` and 
 ### How to read these numbers
 
 - Each config ran once, and the LLM is nondeterministic, so differences of a few corrections are noise.
-- Week 1 is 0 for most lab configs because corrections are written to memory when a rule becomes active. The exceptions in the tables are `baseline_naive_rag` (7 corrections), `no_write_filter` (1 correction, 5 first-attempt failures) and the two Hermes configs (3 each).
+- Week 1 is 0 for most memory configs because corrections are written to memory when a rule becomes active. The exceptions in the tables are `baseline_naive_rag` (7 corrections), `no_write_filter` (1 correction, 5 first-attempt failures) and the two Hermes configs (3 each).
 - Week 2 is dominated by the planted wrong rule (`extra_from_wrong_rule`), which the Monday review removes in week 3.
 - `full` and the reflexion configs are scored after an oracle-guided retry. Compare memory methods on first-attempt failures.
 - `no_reflexion` equals `b5_forget` and shows identical numbers.
@@ -210,7 +210,6 @@ For LongMemEval the full set is above 5,000,000 tokens. The rule is to run a sub
 
 ## Caveats
 
-- The tweet's numbers (91% HumanEval for Reflexion, 39% and 84% for Anthropic's memory tool and context editing, corrections per week 14, 9, 4, 1) are the author's claims. They are NOT verified and are not reproduced here.
 - `archive` cannot fire in the 28-day simulation, because a rule cannot be 30 days old in a 28-day run (`last_used_at` starts at creation) and the recall stages always render rules.
 - `overwrite` is close to a no-op after `write_filter`: facts are already collapsed at write time by `upsert_fact`.
 - Under `expire`, the `reflect` stage effectively has a 7-day window. Under `write_raw`, corrections expire after 7 days while `write_filter` turns them into rules, so part of any `no_write_filter` gap under `expire` is this artifact.
