@@ -87,3 +87,11 @@ def test_hook_ids_exist():
         need |= {f"transcript-{c}", f"seen-toggle-{c}", f"seen-{c}", f"todo-{c}", f"col-{c}"}
         need |= {f"{k}-{c}-{n}" for k in ("tab", "pane") for n in ("rules", "facts", "log")}
     assert need <= ids, need - ids
+
+
+def test_static_has_flash_and_reduced_motion_css():
+    css = (STATIC / "style.css").read_text()
+    assert "@keyframes flash" in css and ".entry.flash" in css
+    block = re.search(r"@media \(prefers-reduced-motion: reduce\)\s*\{(.*?)\n\}", css, re.S).group(1)
+    assert "animation: none" in block
+    assert ".entry.new {" in css and "border-left-color: var(--accent)" in css  # static cue stays

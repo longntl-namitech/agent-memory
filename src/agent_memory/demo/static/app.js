@@ -1,5 +1,5 @@
 "use strict";
-// Skeleton only. T13-T15 add rendering, the turn stream and the controls.
+// T14-T15 add the top-bar controls (mode, advance, reflect, reset, theme persistence is here).
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 
@@ -17,4 +17,235 @@ function initTheme() {
   });
 }
 
+
+// ---- T13: chat, memory panels, to-do card. Server text is only ever set with textContent. ----
+const COLS = ["none", "full"];
+const KINDS = ["rules", "facts", "log"];
+const seenNew = new Set();
+let busy = false;
+
+function el(tag, cls, text) {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (text !== undefined) n.textContent = text;
+  return n;
+}
+
+async function api(path, body) {
+  const r = await fetch(path, body === undefined ? {} : {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || `request failed (${r.status})`);
+  return data;
+}
+
+function showNotice(text) {
+  const n = $("#notice");
+  n.textContent = text || "";
+  n.hidden = !text;
+}
+
+function stamp(iso) { return iso.slice(5, 16).replace("T", " "); }
+
+function entryNode(col, e) {
+  const row = el("div", "entry" + (e.new ? " new" : ""));
+  if (e.new && !seenNew.has(e.id)) { row.classList.add("flash"); seenNew.add(e.id); }
+  const body = el("div", "entry-body");
+  const head = el("div", "entry-head");
+  head.append(el("span", "entry-key", e.key));
+  if (e.new) head.append(el("span", "badge", "NEW"));
+  head.append(el("time", "entry-time dim", stamp(e.created_at)));
+  body.append(head);
+  const text = el("div", "entry-text");
+  if (e.replaced_from) {
+    text.append(el("s", "old dim", e.replaced_from), " ", el("span", "badge quiet", "replaced"), " ");
+  }
+  text.append(e.text);
+  body.append(text);
+  const btn = el("button", "btn ghost small", "Forget this");
+  btn.type = "button";
+  btn.setAttribute("aria-label", `Forget this ${e.key}: ${e.text}`);
+  btn.addEventListener("click", () => forget(col, e.id));
+  row.append(body, btn);
+  return row;
+}
+
+function renderPanel(c, data) {
+  for (const k of KINDS) {
+    const list = data.entries[k];
+    $(`#tab-${c}-${k}`).textContent = `${k.toUpperCase()} ${list.length}`;
+    const pane = $(`#pane-${c}-${k}`);
+    pane.replaceChildren();
+    if (!list.length) {
+      pane.append(el("p", "empty dim", c === "none" ? "Nothing is kept for this assistant" : `No ${k} yet`));
+    } else {
+      pane.append(...list.map((e) => entryNode(c, e)));
+    }
+  }
+  $(`#seen-${c}`).textContent = data.recalled || "(nothing was recalled)";
+}
+
+function renderTodos(c, data) {
+  const ul = $(`#todo-${c} .todo-list`);
+  ul.replaceChildren();
+  if (!data.todos.length) {
+    ul.append(el("li", "empty dim", c === "none" ? "No memory, no list" : "Nothing on the list yet"));
+    return;
+  }
+  for (const t of data.todos) {
+    const li = el("li", "todo-item" + (t.done ? " done" : ""));
+    li.append(el("span", "todo-state mono", t.done ? "done" : "open"), el("span", "todo-text", t.text));
+    const b = el("button", "btn ghost small", "Remove");
+    b.type = "button";
+    b.setAttribute("aria-label", `Remove from the list: ${t.text}`);
+    b.addEventListener("click", () => forget(c, t.key));
+    li.append(b);
+    ul.append(li);
+  }
+}
+
+function render(snap) {
+  $("#sim-date").textContent = snap.date;
+  $("#sim-date").setAttribute("datetime", snap.date.split(" ").pop());
+  $("#mode-live").setAttribute("aria-pressed", String(snap.mode === "live"));
+  $("#mode-replay").setAttribute("aria-pressed", String(snap.mode === "replay"));
+  $("#tokens-cap").textContent = `cap ${snap.cap.toLocaleString()} each`;
+  $("#tokens-none").textContent = `no memory ${snap.columns.none.tokens.toLocaleString()}`;
+  $("#tokens-full").textContent = `memory ${snap.columns.full.tokens.toLocaleString()}`;
+  showNotice(snap.notice);
+  const chips = $("#chips");
+  if (!chips.children.length) {
+    for (const p of snap.prompts.script) {
+      const b = el("button", "", p);
+      b.type = "button";
+      b.addEventListener("click", () => send(p));
+      chips.append(b);
+    }
+  }
+  for (const c of COLS) { renderPanel(c, snap.columns[c]); renderTodos(c, snap.columns[c]); }
+  setBusy(snap.busy || busy);
+}
+
+function setBusy(v) {
+  busy = v;
+  $("#send-btn").disabled = v;
+  $$("#chips button").forEach((b) => { b.disabled = v; });
+}
+
+async function forget(c, id) {
+  try { render(await api("/api/forget", { column: c, entry_id: id })); } catch (e) { showNotice(e.message); }
+}
+
+function addMsg(c, text, cls) {
+  const m = el("div", "msg" + (cls ? " " + cls : ""), text);
+  $(`#transcript-${c}`).append(m);
+  m.scrollIntoView({ block: "end" });
+  return m;
+}
+
+// Deltas fill a busy bubble inside a transcript that is aria-busy, so a screen reader hears the whole
+// message once, when the turn is complete, not every chunk.
+function parseSSE(buf, onEvent) {
+  let i;
+  while ((i = buf.indexOf("\n\n")) >= 0) {
+    const block = buf.slice(0, i);
+    buf = buf.slice(i + 2);
+    let name = "message", data = "";
+    for (const line of block.split("\n")) {
+      if (line.startsWith("event: ")) name = line.slice(7);
+      else if (line.startsWith("data: ")) data += line.slice(6);
+    }
+    if (data) onEvent(name, JSON.parse(data));
+  }
+  return buf;
+}
+
+async function send(text) {
+  text = text.trim();
+  if (!text || busy) return;
+  setBusy(true);
+  const bubbles = {};
+  for (const c of COLS) {
+    $(`#transcript-${c}`).setAttribute("aria-busy", "true");
+    addMsg(c, text, "user");
+    const b = addMsg(c, "", "assistant pending");
+    b.append(el("span", "dots", "Thinking"));
+    bubbles[c] = b;
+  }
+  $("#input").value = "";
+  const got = {};
+  const onEvent = (name, d) => {
+    if (name === "delta") {
+      const b = bubbles[d.column];
+      if (!got[d.column]) { b.replaceChildren(); b.classList.remove("pending"); got[d.column] = true; }
+      b.append(d.text);
+    } else if (name === "error") {
+      if (d.column) {
+        const b = bubbles[d.column];
+        if (!got[d.column]) { b.replaceChildren(); b.classList.remove("pending"); got[d.column] = true; }
+        b.classList.add("error");
+        b.append(got[d.column] && b.textContent ? ` (${d.message})` : d.message);
+      } else showNotice(d.message);
+    } else if (name === "snapshot") render(d);
+  };
+  try {
+    const r = await fetch("/api/turn", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }),
+    });
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `request failed (${r.status})`);
+    const reader = r.body.getReader();
+    const dec = new TextDecoder();
+    let buf = "";
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf = parseSSE(buf + dec.decode(value, { stream: true }), onEvent);
+    }
+  } catch (e) {
+    showNotice(e.message);
+  } finally {
+    for (const c of COLS) {
+      const b = bubbles[c];
+      if (b.classList.contains("pending")) { b.replaceChildren(); b.classList.remove("pending"); b.classList.add("error"); b.textContent = "No reply"; }
+      $(`#transcript-${c}`).setAttribute("aria-busy", "false");
+    }
+    setBusy(false);
+    $("#input").focus();
+  }
+}
+
+// WAI-ARIA tabs: roving tabindex, arrows, Home and End; panels are hidden unless selected.
+function initTabs(c) {
+  const tabs = KINDS.map((k) => $(`#tab-${c}-${k}`));
+  const select = (i, focus) => {
+    tabs.forEach((t, j) => {
+      t.setAttribute("aria-selected", String(i === j));
+      t.tabIndex = i === j ? 0 : -1;
+      $(`#${t.getAttribute("aria-controls")}`).hidden = i !== j;
+    });
+    if (focus) tabs[i].focus();
+  };
+  tabs.forEach((t, i) => {
+    t.addEventListener("click", () => select(i, false));
+    t.addEventListener("keydown", (ev) => {
+      const next = { ArrowRight: (i + 1) % 3, ArrowLeft: (i + 2) % 3, Home: 0, End: 2 }[ev.key];
+      if (next === undefined) return;
+      ev.preventDefault();
+      select(next, true);
+    });
+  });
+  const toggle = $(`#seen-toggle-${c}`);
+  toggle.textContent = "Show what the assistant saw";
+  toggle.addEventListener("click", () => {
+    const open = toggle.getAttribute("aria-expanded") !== "true";
+    toggle.setAttribute("aria-expanded", String(open));
+    toggle.textContent = open ? "Hide what the assistant saw" : "Show what the assistant saw";
+    $(`#seen-${c}`).hidden = !open;
+  });
+}
+
 initTheme();
+COLS.forEach(initTabs);
+$("#send").addEventListener("submit", (ev) => { ev.preventDefault(); send($("#input").value); });
+api("/api/state").then(render).catch((e) => showNotice(e.message));
