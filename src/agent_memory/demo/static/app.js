@@ -141,16 +141,26 @@ function render(snap) {
   pollWhileBusy(snap.busy);
 }
 
-// After a reload mid-turn the server may still be busy: poll about once a second, one poll at a time.
+// After a reload mid-turn the server may still be busy: poll (1s, then 3s after a failure), one poll at a
+// time. After 5 failures in a row give up and re-enable the controls so the page is not stuck.
 let polling = false;
-function pollWhileBusy(serverBusy) {
-  if (!serverBusy || polling || sending) return;
+let pollFails = 0;
+function pollWhileBusy(isBusy) {
+  if (!isBusy) { pollFails = 0; return; }
+  if (polling || sending) return;
   polling = true;
   setTimeout(async () => {
     polling = false;
     if (sending) return;
-    try { render(await api("/api/state")); } catch (e) { showNotice(e.message); }
-  }, 1000);
+    try {
+      const snap = await api("/api/state");
+      pollFails = 0;
+      render(snap);
+    } catch (e) {
+      if (++pollFails >= 5) { pollFails = 0; showNotice(e.message); setBusy(false); return; }
+      pollWhileBusy(true);
+    }
+  }, pollFails ? 3000 : 1000);
 }
 
 function setBusy(v) {
@@ -276,6 +286,16 @@ function initTabs(c) {
     toggle.textContent = open ? "Hide what the assistant saw" : "Show what the assistant saw";
     $(`#seen-${c}`).hidden = !open;
   });
+  const seen = $(`#seen-${c}`);
+  seen.tabIndex = 0;
+  const close = (ev) => {
+    if (ev.key !== "Escape" || seen.hidden) return;
+    ev.preventDefault();
+    toggle.click();
+    toggle.focus();
+  };
+  toggle.addEventListener("keydown", close);
+  seen.addEventListener("keydown", close);
 }
 
 initTheme();
