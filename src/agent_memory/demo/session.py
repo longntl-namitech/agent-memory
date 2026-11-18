@@ -2,6 +2,7 @@
 import os
 import shutil
 import threading
+from contextlib import contextmanager
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -55,8 +56,26 @@ class Session:
         self.paths, self.mode, self.max_tokens = paths, mode, max_tokens
         self.base_url, self.model, self.config_dir = base_url, model, Path(config_dir)
         self.transport, self.embed_transport = transport, embed_transport
-        self._lock = threading.RLock()
+        self._lock = threading.RLock()  # serialises actions
+        self._snap_lock = threading.Lock()  # guards only the stored snapshot, never held across a slow call
+        self._busy, self._snap = 0, {}
         self.reset()
+
+    @contextmanager
+    def _act(self):
+        with self._snap_lock:
+            self._busy += 1
+        try:
+            with self._lock:
+                try:
+                    yield
+                finally:
+                    snap = self._build_snapshot()
+                    with self._snap_lock:
+                        self._snap = snap
+        finally:
+            with self._snap_lock:
+                self._busy -= 1
 
     # -- construction -------------------------------------------------------------------------
     def _secrets(self) -> list[str]:
@@ -111,7 +130,7 @@ class Session:
         try:
             r = self._track(col, lambda: col.assistant.turn(text, now, turn_id))
         except Exception as exc:
-            col.error = self._error_text(exc)
+            col.recalled, col.error = "", self._error_text(exc)
             return ColumnTurn(None, col.error), exc
         col.recalled, col.error = r.recalled, None
         return ColumnTurn(r.reply, None, r.tokens, r.recalled), None
@@ -125,7 +144,7 @@ class Session:
         return {c: r[0] for c, r in res.items()}, [r[1] for r in res.values() if r[1] is not None]
 
     def turn(self, text: str) -> dict[str, ColumnTurn]:
-        with self._lock:
+        with self._act():
             self.history.append(text)
             out, excs = self._run_turn(text)
             if self.mode == "live" and any(is_live_failure(e) for e in excs):
@@ -140,18 +159,23 @@ class Session:
         return out
 
     def _failover(self) -> None:
-        self.notice = f"Live call failed, switched to replay, replaying your last {len(self.history)} turns"
         self.mode = "replay"
-        self._clear_state()
+        try:
+            self._clear_state(keep_budgets=True)
+        except BaseException:
+            self.mode = "live"
+            raise
+        self.notice = f"Live call failed, switched to replay, replaying your last {len(self.history)} turns"
 
-    def _clear_state(self) -> None:
+    def _clear_state(self, keep_budgets: bool = False) -> None:
         self.clock, self._n = SimClock(START), 0
         for c in COLUMNS:
             shutil.rmtree(self.paths.store(c), ignore_errors=True)
-        self._rebuild()
+        # the token cap guards real spend, so a mode switch or failover keeps what was already used
+        self._rebuild({c: v.budget for c, v in self.cols.items()} if keep_budgets else None)
 
     def forget(self, column: str, entry_id: str) -> bool:
-        with self._lock:
+        with self._act():
             col = self.cols.get(column)
             if col is None:
                 return False
@@ -164,13 +188,13 @@ class Session:
             return True
 
     def advance(self) -> None:
-        with self._lock:
+        with self._act():
             self.clock.advance(days=1)
             for col in self.cols.values():
                 self._guard(col, lambda: self._track(col, lambda: col.assistant.memory.forget(self.clock.now())))
 
     def reflect(self) -> None:
-        with self._lock:
+        with self._act():
             col, now = self.cols["full"], self.clock.now()
             self._guard(col, lambda: self._track(col, lambda: (col.assistant.memory.reflect(now),
                                                               col.assistant.memory.forget(now))))
@@ -178,31 +202,41 @@ class Session:
     def set_mode(self, mode: str) -> None:
         if mode not in ("live", "replay"):
             raise ValueError(f"unknown mode: {mode!r}")
-        with self._lock:
+        with self._act():
             self.notice = None
             if mode == self.mode:
                 return
-            self.mode = mode
+            old, self.mode = self.mode, mode
+            try:
+                if mode == "replay":
+                    self._clear_state(keep_budgets=True)
+                else:
+                    self._rebuild({c: v.budget for c, v in self.cols.items()})
+            except BaseException:
+                self.mode = old
+                raise
             if mode == "replay":
-                self._clear_state()
                 self._replay_history()
-            else:
-                self._rebuild({c: v.budget for c, v in self.cols.items()})
 
     def reset(self) -> None:
-        with self._lock:
+        with self._act():
             self.history: list[str] = []
             self.notice: str | None = None
             self._clear_state()
 
     def wipe(self) -> None:
-        with self._lock:
+        with self._act():
             self.paths.wipe()
             self.reset()
 
     # -- view ---------------------------------------------------------------------------------
     def snapshot(self) -> dict:
-        with self._lock:
+        """The state after the last completed action; never waits for a running one."""
+        with self._snap_lock:
+            return {**self._snap, "busy": self._busy > 0}
+
+    def _build_snapshot(self) -> dict:
+        if True:
             def entries(col: _Column, es):
                 return [{"id": e.id, "key": e.key, "text": e.text, "created_at": e.created_at.isoformat(),
                          "new": e.id in col.new, "replaced_from": col.replaced.get(e.id)} for e in es]

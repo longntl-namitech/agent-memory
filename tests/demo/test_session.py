@@ -179,3 +179,112 @@ def test_wipe_clears_data_dir(paths):
     s.wipe()
     assert not any(paths.llm_live.iterdir()) and not any(paths.embeddings.iterdir())
     assert s.snapshot()["columns"]["full"]["entries"]["facts"] == []
+
+
+def test_snapshot_never_waits_for_a_running_turn(paths):
+    gate, inside = threading.Event(), threading.Event()
+    inner = make_transport()
+
+    def slow(model, messages):
+        inside.set()
+        gate.wait(5)
+        return inner(model, messages)
+
+    s = make(paths, transport=slow)
+    assert s.snapshot()["busy"] is False
+    t = threading.Thread(target=s.turn, args=(T1,))
+    t.start()
+    assert inside.wait(5)
+    got = []
+    r = threading.Thread(target=lambda: got.append(s.snapshot()))
+    r.start()
+    r.join(1)
+    assert not r.is_alive() and got[0]["busy"] is True
+    assert got[0]["columns"]["full"]["entries"]["facts"] == []  # last completed state
+    gate.set()
+    t.join(5)
+    snap = s.snapshot()
+    assert snap["busy"] is False and snap["columns"]["full"]["entries"]["facts"]
+
+
+def test_secrets_never_reach_error_notice_or_snapshot(paths, monkeypatch):
+    k1, k2 = "sk-fakeOPENAIkey1234567890", "embed-secret-ABCDEF"
+    monkeypatch.setenv("OPENAI_API_KEY", k1)
+    monkeypatch.setenv("EMBEDDING_API_KEY", k2)
+
+    def leaky(model, messages):
+        raise RuntimeError(f"boom key={k1} emb={k2} Authorization: Bearer tok_abcdefghijkl")
+
+    s = make(paths, transport=leaky)
+    out = s.turn(T1)  # RuntimeError is not a live failure: stays a per-column error
+    blob = json.dumps(s.snapshot(), default=lambda o: o.__dict__)
+    for text in (out["none"].error, out["full"].error, blob):
+        assert k1 not in text and k2 not in text and "tok_abcdefghijkl" not in text
+    assert "[redacted]" in out["full"].error and s.snapshot()["mode"] == "live"
+
+    def leaky_net(model, messages):
+        raise OSError(f"connect failed {k1} Bearer tok_abcdefghijkl")
+
+    s2 = make(paths, transport=leaky_net)
+    s2.turn(T1)  # live failure: failover, replay miss errors
+    blob = json.dumps(s2.snapshot(), default=lambda o: o.__dict__)
+    assert k1 not in blob and k2 not in blob and "tok_abcdefghijkl" not in blob and s2.snapshot()["notice"]
+
+    s3 = make(paths)  # _guard path: reflect raises with secrets in the text
+    s3.turn(T3)
+    s3.cols["full"].assistant.memory.reflectors[0].reflect = lambda *a: (_ for _ in ()).throw(RuntimeError(k1 + k2))
+    s3.reflect()
+    err = s3.snapshot()["columns"]["full"]["error"]
+    assert err and k1 not in err and k2 not in err
+
+
+def test_live_after_warmup_still_calls_transport_and_writes_live_cache(paths):
+    make(paths, mode="warmup").turn(T1)
+    calls = []
+    inner = make_transport()
+    s = make(paths, transport=lambda m, msgs: (calls.append(1), inner(m, msgs))[1])
+    s.turn(T1)
+    assert calls and any(paths.llm_live.iterdir())
+
+
+def test_set_mode_keeps_budgets_both_ways(paths):
+    make(paths, mode="warmup").turn(T1)
+    s = make(paths)
+    s.turn(T1)
+    used = {c: v["tokens"] for c, v in s.snapshot()["columns"].items()}
+    assert used["full"] > 0
+    s.set_mode("replay")
+    assert {c: v["tokens"] for c, v in s.snapshot()["columns"].items()} == used
+    s.set_mode("live")
+    assert {c: v["tokens"] for c, v in s.snapshot()["columns"].items()} == used
+
+
+def test_failover_resets_clock_and_handles_one_failing_column(paths):
+    warm = make(paths, mode="warmup")
+    warm.turn(T1)
+    warm.turn(T2)
+    # only the full column's prompt carries remembered text, so only it raises
+    inner = make_transport()
+
+    def one_col(model, messages):
+        if "Lives in" in messages[0]["content"]:
+            raise OSError("down")
+        return inner(model, messages)
+
+    s = make(paths, transport=one_col)
+    s.turn(T1)
+    s.advance()
+    assert s.snapshot()["date"] == "Tue 2026-01-06"
+    out = s.turn(T2)
+    snap = s.snapshot()
+    assert snap["mode"] == "replay" and snap["date"] == "Mon 2026-01-05"
+    assert out["none"].error is None and out["full"].error is None
+
+
+def test_new_and_replaced_flags_clear_after_next_action(paths):
+    s = make(paths)
+    s.turn(T1)
+    s.turn(T2)
+    s.advance()
+    (f,) = s.snapshot()["columns"]["full"]["entries"]["facts"]
+    assert f["new"] is False and f["replaced_from"] is None
