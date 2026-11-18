@@ -40,7 +40,7 @@ Use the three example prompts above the input (or type them):
 2. `I just moved to Hanoi.` The `city` fact is overwritten and the old value is shown as replaced.
 3. `Where do I live and what's on my list?` The memory column answers from memory (open "What the assistant saw" to show why); the other column says it does not know.
 
-In the warm-up run the full column's reply to prompt 2 was "I don't know—your memory says you live in Ho Chi Minh City, but I don't have any recorded details about a move to Hanoi." The memory was still updated correctly, so the reply wording can be awkward while the memory panel shows the change. For nicer wording, rerun the warm-up (about 4,000 tokens).
+In the warm-up run the full column's reply to prompt 2 was "I don't know - your memory says you live in Ho Chi Minh City, but I don't have any recorded details about a move to Hanoi." The memory was still updated correctly, so the reply wording can be awkward while the memory panel shows the change. For nicer wording, rerun the warm-up (about 4,000 tokens).
 
 Optional second act: send `This week I'm on a diet.`, then press "Advance a day" seven times. The LOG lines expire and are archived after seven days while the facts and the to-do list stay. "Run Friday reflect" makes one model call (it is not in the warm-up cache, so in replay that column shows the miss message) that reads the active log lines and may write up to 3 rules from them, archiving the log lines it used.
 
