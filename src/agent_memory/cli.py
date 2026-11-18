@@ -33,6 +33,7 @@ HERMES_BOOTSTRAP_NOTE = ("note: the first Hermes call in a new data root bootstr
                          "(installs Python dependencies) and can take minutes")
 CACHE_NOTE = "shared across configs, so per-config tokens depend on run order"
 LME_CACHE = Path(".cache")
+DEMO_DEFAULT_ROOT = Path(__file__).resolve().parents[2] / ".demo"
 LME_PER_ABILITY = 10
 LME_SEED = 7
 SUBSET_LIMIT = 1_000_000  # global rule: above 5M, first run a subset under 1M, then ask before the full set
@@ -419,7 +420,59 @@ def _run(args, parser) -> int:
     return code
 
 
-def main(argv: list[str] | None = None) -> int:
+_DEMO_LIVE_ENV = ("OPENAI_API_KEY", "EMBEDDING_BASE_URL", "EMBEDDING_MODEL")  # OPENAI_BASE_URL, EMBEDDING_API_KEY optional
+
+
+def _demo(args, *, transport=None, embed_transport=None, ready=None) -> int:
+    """`transport` and `embed_transport` replace the real clients (tests); `ready(server)` is called once serving."""
+    from agent_memory.demo.paths import DemoPaths
+    from agent_memory.demo.script import estimate_tokens, run_script
+    from agent_memory.demo.server import make_server
+    from agent_memory.demo.session import Session
+
+    try:
+        paths = DemoPaths(args.data_dir) if args.data_dir else DemoPaths(DEMO_DEFAULT_ROOT)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    print(f"estimated tokens: {estimate_tokens(include_second_act=True):,} (placeholder, unverified until a real warm-up)")
+    print(f"data dir: {paths.root}")
+    if args.estimate_only:
+        return 0
+    mode = "warmup" if args.warmup else args.mode
+    if mode != "replay":
+        missing = [v for v in _DEMO_LIVE_ENV if not os.environ.get(v)
+                   and not (v == "OPENAI_API_KEY" and transport) and not (v != "OPENAI_API_KEY" and embed_transport)]
+        if missing:
+            print(f"error: set {', '.join(missing)} in the environment first", file=sys.stderr)
+            return 2
+    session = Session(paths, mode=mode, max_tokens=args.max_tokens, base_url=os.environ.get("OPENAI_BASE_URL"),
+                      model=os.environ.get("OPENAI_MODEL", "gpt-5.4-nano"), config_dir=CONFIGS / "demo",
+                      transport=transport, embed_transport=embed_transport)
+    if args.warmup:
+        run_script(session, include_second_act=True)
+        cols = session.snapshot()["columns"]
+        print(f"warm-up tokens used: {sum(c['tokens'] for c in cols.values()):,}")
+        errors = [f"{n}: {c['error']}" for n, c in cols.items() if c["error"]]
+        if errors:
+            print("warm-up errors: " + "; ".join(errors), file=sys.stderr)
+            return 1
+        return 0
+    server = make_server(session, args.port)
+    print(f"http://127.0.0.1:{server.server_address[1]}/")
+    if ready:
+        ready(server)
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.server_close()
+    return 0
+
+
+def main(argv: list[str] | None = None, *, demo_transport=None, demo_embed_transport=None,
+         demo_ready=None) -> int:
     parser = argparse.ArgumentParser(prog="agent-memory")
     sub = parser.add_subparsers(dest="command", required=True)
     review = sub.add_parser("review").add_subparsers(dest="action", required=True)
@@ -461,7 +514,16 @@ def main(argv: list[str] | None = None) -> int:
     pilot.add_argument("--max-tokens", type=_positive, help="required with --run: stop when Hermes' usage passes it")
     pilot.add_argument("--overwrite", action="store_true", help="replace an existing pilot results file")
     pilot.add_argument("--results-dir", type=Path, default=Path("results"))
+    demo = sub.add_parser("demo", help="local side-by-side chat demo: no memory vs full memory")
+    demo.add_argument("--port", type=int, default=8765)
+    demo.add_argument("--max-tokens", type=_positive, default=100_000, help="token cap per column")
+    demo.add_argument("--mode", choices=["live", "replay"], default="live")
+    demo.add_argument("--data-dir", type=Path, help="default: .demo/ in the repo")
+    demo.add_argument("--warmup", action="store_true", help="run the scripted story live once to fill the replay cache")
+    demo.add_argument("--estimate-only", action="store_true", help="print the estimate and the data dir, then stop")
     args = parser.parse_args(argv)
+    if args.command == "demo":
+        return _demo(args, transport=demo_transport, embed_transport=demo_embed_transport, ready=demo_ready)
     if args.command == "pilot":
         import agent_memory.methods  # noqa: F401
 
