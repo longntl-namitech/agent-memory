@@ -65,7 +65,7 @@ def test_contrast_tokens():
         text_pairs = [
             ("fg", "bg"), ("fg", "card"), ("fg", "muted"),
             ("muted-fg", "bg"), ("muted-fg", "card"), ("muted-fg", "muted"),
-            ("accent", "bg"), ("accent", "card"), ("accent", "accent-soft"), ("muted-fg", "accent-soft"),
+            ("accent", "bg"), ("accent", "card"), ("accent", "accent-soft"), ("muted-fg", "accent-soft"), ("fg", "accent-soft"),
             ("on-accent", "accent"), ("danger", "bg"), ("danger", "card"), ("danger", "muted"),
         ]
         for fg, bg in text_pairs:

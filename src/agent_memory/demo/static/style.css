@@ -1,4 +1,4 @@
-/* Tokens. Palette 4 (Teal + Blue Grey, Red standard for errors). Spacing is a 4px scale, radius 8px. System font stacks only. */
+/* Tokens. Yellow Vivid + Blue Grey (Red standard for errors). Spacing is a 4px scale, radius 8px. System font stacks only. */
 :root {
   --bg: #102A43;
   --card: #243B53;
@@ -7,8 +7,8 @@
   --muted-fg: #BCCCDC;
   --outline: #9FB3C8;
   --hairline: #334E68;
-  --accent: #65D6AD;
-  --accent-soft: #014D40;
+  --accent: #F0B429;
+  --accent-soft: #8D2B0B;
   --on-accent: #102A43;
   --danger: #FACDCD;
   --ring: #F0F4F8;
@@ -27,10 +27,10 @@
   --muted-fg: #486581;
   --outline: #627D98;
   --hairline: #BCCCDC;
-  --accent: #147D64;
-  --accent-soft: #EFFCF6;
+  --accent: #B44D12;
+  --accent-soft: #FFFBEA;
   --on-accent: #FFFFFF;
-  --danger: #A61B1B;
+  --danger: #780A0A;
   --ring: #102A43;
   color-scheme: light;
 }
