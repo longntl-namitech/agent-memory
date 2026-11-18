@@ -1,3 +1,4 @@
+import json
 import os
 import shutil
 from pathlib import Path
@@ -23,6 +24,9 @@ def _is_unsafe(root: Path) -> bool:
     return False
 
 
+OWN_ENTRIES = ("stores", "llm-cache-live", "llm-cache-rehearsed", "embedding-cache")  # meta.json lives in the third
+
+
 class DemoPaths:
     def __init__(self, root: Path) -> None:
         self.root = Path(root).resolve()
@@ -46,6 +50,30 @@ class DemoPaths:
     def embeddings(self) -> Path:
         return self.root / "embedding-cache"
 
+    def live_cache(self, column: str) -> Path:
+        # one cache dir per column: both columns can send identical requests, which a real model answers differently
+        return self.llm_live / self.store(column).name
+
+    def rehearsed_cache(self, column: str) -> Path:
+        return self.llm_rehearsed / self.store(column).name
+
+    @property
+    def meta(self) -> Path:
+        return self.llm_rehearsed / "meta.json"
+
+    def write_meta(self, model: str, embedding_model: str) -> None:
+        """Names only (never keys or URLs): the cache keys depend on them, so replay must reuse the warm-up's."""
+        self.meta.parent.mkdir(parents=True, exist_ok=True)
+        self.meta.write_text(json.dumps({"model": model, "embedding_model": embedding_model}))
+
+    def read_meta(self) -> dict | None:
+        try:
+            d = json.loads(self.meta.read_text())
+        except (OSError, ValueError):
+            return None
+        return d if isinstance(d, dict) and isinstance(d.get("model"), str) \
+            and isinstance(d.get("embedding_model"), str) else None
+
     def ensure(self) -> None:
         for d in (self.llm_live, self.llm_rehearsed, self.embeddings):
             d.mkdir(parents=True, exist_ok=True)
@@ -56,8 +84,10 @@ class DemoPaths:
             raise ValueError(f"refusing unsafe demo root: {self.root}")
         if not self.root.is_dir():
             return
-        for child in self.root.iterdir():
+        # only the demo's own entries: a foreign file in a user-chosen --data-dir is never touched
+        for name in OWN_ENTRIES:
+            child = self.root / name
             if child.is_dir() and not child.is_symlink():
                 shutil.rmtree(child)
-            else:
+            elif child.is_symlink() or child.exists():
                 child.unlink()

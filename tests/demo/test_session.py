@@ -183,8 +183,8 @@ def test_reset_restores_initial_state(paths):
     s.reset()
     snap = s.snapshot()
     assert snap["date"] == "Mon 2026-01-05" and snap["notice"] is None
-    assert all(c["entries"] == {"rules": [], "facts": [], "log": []} and c["tokens"] == 0
-               for c in snap["columns"].values())
+    assert all(c["entries"] == {"rules": [], "facts": [], "log": []} for c in snap["columns"].values())
+    assert all(c["tokens"] > 0 for c in snap["columns"].values())  # spent tokens stay counted
     assert snap["prompts"]["script"][0] == T1
 
 

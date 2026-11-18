@@ -1,5 +1,5 @@
 "use strict";
-// T14-T15 add the top-bar controls (mode, advance, reflect, reset, theme persistence is here).
+// Page script: chat, memory panels, to-do cards, top-bar controls and theme.
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 
@@ -63,7 +63,6 @@ function showNotice(text, fromServer) {
 
 function clearClientNotice() {
   if (!clientNote) return;
-  clientNote = false;
   clientNote = false;
   $("#notice").hidden = true;
 }

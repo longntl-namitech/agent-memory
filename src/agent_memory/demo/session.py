@@ -81,16 +81,26 @@ class Session:
     def _secrets(self) -> list[str]:
         return [s for s in (os.environ.get("OPENAI_API_KEY"), os.environ.get("EMBEDDING_API_KEY")) if s]
 
+    def _model_names(self) -> tuple[str, str]:
+        """Cache keys include both model names, so replay takes them from the warm-up's meta file, not the env."""
+        meta = self.paths.read_meta() if self.mode == "replay" else None
+        if meta:
+            return meta["model"], meta["embedding_model"]
+        return self.model, os.environ.get("EMBEDDING_MODEL") or "unset"
+
     def _build(self, col: str, budget: TokenBudget) -> _Column:
         self.paths.ensure()
         store = Store(self.paths.store(col))
-        llm = make_llm(self.mode, self.paths, budget, base_url=self.base_url, model=self.model,
-                       transport=self.transport)
+        model, emb_model = self._model_names()
+        if self.mode == "warmup":
+            self.paths.write_meta(model, emb_model)
+        llm = make_llm(self.mode, self.paths, budget, base_url=self.base_url, model=model,
+                       transport=self.transport, column=col)
         memory = build(load_config(self.config_dir / f"{_CONFIGS[col]}.toml"), llm=llm, store=store).memory
         if col == "full":
             memory.recaller.embedder = make_embedder(
                 self.mode, self.paths, base_url=os.environ.get("EMBEDDING_BASE_URL") or "unset",
-                model=os.environ.get("EMBEDDING_MODEL") or "unset", api_key=os.environ.get("EMBEDDING_API_KEY"),
+                model=emb_model, api_key=os.environ.get("EMBEDDING_API_KEY"),
                 transport=self.embed_transport)
         return _Column(PersonalAssistant(memory, llm, store, keeps_memory=col == "full"), store, budget)
 
@@ -229,7 +239,8 @@ class Session:
         with self._act():
             self.history: list[str] = []
             self.notice: str | None = None
-            self._clear_state()
+            # spent tokens stay counted for the life of the process: the cap guards real spend
+            self._clear_state(keep_budgets=hasattr(self, "cols"))
 
     def wipe(self) -> None:
         with self._act():
@@ -243,21 +254,20 @@ class Session:
             return {**self._snap, "busy": self._busy > 0}
 
     def _build_snapshot(self) -> dict:
-        if True:
-            def entries(col: _Column, es):
-                return [{"id": e.id, "key": e.key, "text": e.text, "created_at": e.created_at.isoformat(),
-                         "new": e.id in col.new, "replaced_from": col.replaced.get(e.id)} for e in es]
+        def entries(col: _Column, es):
+            return [{"id": e.id, "key": e.key, "text": e.text, "created_at": e.created_at.isoformat(),
+                     "new": e.id in col.new, "replaced_from": col.replaced.get(e.id)} for e in es]
 
-            columns = {}
-            for c, col in self.cols.items():
-                st = col.store
-                columns[c] = {
-                    "title": _TITLES[c],
-                    "entries": {"rules": entries(col, st.rules()),
-                                "facts": entries(col, [e for e in st.facts() if not e.key.startswith(TODO_PREFIX)]),
-                                "log": entries(col, st.log())},
-                    "todos": todos(st), "tokens": col.budget.used, "recalled": col.recalled, "error": col.error}
-            return {"date": self.clock.now().strftime("%a %Y-%m-%d"), "mode": self.mode, "cap": self.max_tokens,
-                    "notice": self.notice,
-                    "prompts": {"persona": PERSONA, "script": list(PROMPTS), "second_act": SECOND_ACT},
-                    "columns": columns}
+        columns = {}
+        for c, col in self.cols.items():
+            st = col.store
+            columns[c] = {
+                "title": _TITLES[c],
+                "entries": {"rules": entries(col, st.rules()),
+                            "facts": entries(col, [e for e in st.facts() if not e.key.startswith(TODO_PREFIX)]),
+                            "log": entries(col, st.log())},
+                "todos": todos(st), "tokens": col.budget.used, "recalled": col.recalled, "error": col.error}
+        return {"date": self.clock.now().strftime("%a %Y-%m-%d"), "mode": self.mode, "cap": self.max_tokens,
+                "notice": self.notice,
+                "prompts": {"persona": PERSONA, "script": list(PROMPTS), "second_act": SECOND_ACT},
+                "columns": columns}

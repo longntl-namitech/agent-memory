@@ -33,7 +33,6 @@ HERMES_BOOTSTRAP_NOTE = ("note: the first Hermes call in a new data root bootstr
                          "(installs Python dependencies) and can take minutes")
 CACHE_NOTE = "shared across configs, so per-config tokens depend on run order"
 LME_CACHE = Path(".cache")
-DEMO_DEFAULT_ROOT = Path(__file__).resolve().parents[2] / ".demo"
 LME_PER_ABILITY = 10
 LME_SEED = 7
 SUBSET_LIMIT = 1_000_000  # global rule: above 5M, first run a subset under 1M, then ask before the full set
@@ -425,13 +424,13 @@ _DEMO_LIVE_ENV = ("OPENAI_API_KEY", "EMBEDDING_BASE_URL", "EMBEDDING_MODEL")  # 
 
 def _demo(args, *, transport=None, embed_transport=None, ready=None) -> int:
     """`transport` and `embed_transport` replace the real clients (tests); `ready(server)` is called once serving."""
-    from agent_memory.demo.paths import DemoPaths
+    from agent_memory.demo.paths import DEFAULT_ROOT, DemoPaths
     from agent_memory.demo.script import estimate_tokens, run_script
     from agent_memory.demo.server import make_server
     from agent_memory.demo.session import Session
 
     try:
-        paths = DemoPaths(args.data_dir) if args.data_dir else DemoPaths(DEMO_DEFAULT_ROOT)
+        paths = DemoPaths(args.data_dir) if args.data_dir else DemoPaths(DEFAULT_ROOT)
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
@@ -440,6 +439,9 @@ def _demo(args, *, transport=None, embed_transport=None, ready=None) -> int:
     if args.estimate_only:
         return 0
     mode = "warmup" if args.warmup else args.mode
+    if mode == "replay" and paths.read_meta() is None:
+        print("error: no rehearsed session in the data dir, run `agent-memory demo --warmup` first", file=sys.stderr)
+        return 2
     if mode != "replay":
         missing = [v for v in _DEMO_LIVE_ENV if not os.environ.get(v)
                    and not (v == "OPENAI_API_KEY" and transport) and not (v != "OPENAI_API_KEY" and embed_transport)]

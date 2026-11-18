@@ -20,10 +20,20 @@ def test_wipe_removes_all_files_keeps_root(tmp_path):
     p.ensure()
     (p.store("a")).mkdir(parents=True)
     (p.store("a") / "f.txt").write_text("x")
-    (p.root / "top.txt").write_text("y")
     p.wipe()
     assert p.root.is_dir()
     assert list(p.root.iterdir()) == []
+
+
+def test_wipe_keeps_foreign_files(tmp_path):
+    p = DemoPaths(tmp_path / "demo")
+    p.ensure()
+    (p.root / "notes.txt").write_text("mine")
+    (p.root / "other").mkdir()
+    (p.root / "other" / "f").write_text("x")
+    p.wipe()
+    assert (p.root / "notes.txt").read_text() == "mine" and (p.root / "other" / "f").exists()
+    assert not p.llm_live.exists() and not p.embeddings.exists()
 
 
 def test_wipe_refuses_outside_root():
@@ -84,9 +94,9 @@ def test_wipe_unlinks_symlink_not_target(tmp_path):
     (outside / "keep.txt").write_text("k")
     p = DemoPaths(tmp_path / "demo")
     p.ensure()
-    (p.root / "link").symlink_to(outside, target_is_directory=True)
+    (p.root / "stores").symlink_to(outside, target_is_directory=True)
     p.wipe()
-    assert not (p.root / "link").exists() and not (p.root / "link").is_symlink()
+    assert not (p.root / "stores").exists() and not (p.root / "stores").is_symlink()
     assert (outside / "keep.txt").read_text() == "k"
 
 
