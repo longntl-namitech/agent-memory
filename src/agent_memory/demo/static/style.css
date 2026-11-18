@@ -94,6 +94,7 @@ p { margin: 0; }
 .seg-btn { border-radius: 0; }
 .seg-btn:first-child { border-radius: var(--radius) 0 0 var(--radius); }
 .seg-btn:last-child { border-radius: 0 var(--radius) var(--radius) 0; margin-left: -1px; }
+.seg-btn[aria-pressed="true"]:disabled { opacity: 1; cursor: default; }
 .seg-btn[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
 
 /* Columns */

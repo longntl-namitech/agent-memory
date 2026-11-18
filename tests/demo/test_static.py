@@ -82,7 +82,7 @@ def test_hook_ids_exist():
     p.feed((STATIC / "index.html").read_text())
     ids = {a["id"] for a in p.attrs if "id" in a}
     need = {"mode-live", "mode-replay", "tokens-none", "tokens-full", "tokens-cap", "sim-date",
-            "notice", "notice-text", "notice-close", "mode-status", "mode-text", "wipe", "error-none", "error-full",
+            "notice", "notice-text", "notice-close", "mode-status", "mode-text", "wipe", "wipe-status", "error-none", "error-full",
             "advance", "reflect", "theme", "chips", "send", "input", "send-btn", "reset"}
     for c in ("none", "full"):
         need |= {f"transcript-{c}", f"seen-toggle-{c}", f"seen-{c}", f"todo-{c}", f"col-{c}"}

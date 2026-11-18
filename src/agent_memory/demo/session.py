@@ -165,7 +165,12 @@ class Session:
         except BaseException:
             self.mode = "live"
             raise
-        self.notice = f"Live call failed, switched to replay, replaying your last {len(self.history)} turns"
+        self.notice = f"Live call failed, switched to replay. {self._rebuilt_note()}"
+
+    def _rebuilt_note(self) -> str:
+        n = len(self.history)
+        return (f"Memory rebuilt from your {n} message{'s' if n != 1 else ''}. "
+                "The date, reflect and forgotten items were reset.")
 
     def _clear_state(self, keep_budgets: bool = False) -> None:
         self.clock, self._n = SimClock(START), 0
@@ -217,6 +222,8 @@ class Session:
                 raise
             if mode == "replay":
                 self._replay_history()
+                if self.history:
+                    self.notice = f"Switched to replay. {self._rebuilt_note()}"
 
     def reset(self) -> None:
         with self._act():

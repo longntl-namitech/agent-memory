@@ -27,6 +27,7 @@ let busy = false;
 let sending = false;
 let serverBusy = false;
 let acting = false;
+let currentMode = "live";
 
 function el(tag, cls, text) {
   const n = document.createElement(tag);
@@ -45,13 +46,27 @@ async function api(path, body) {
   return data;
 }
 
-let dismissed = null;  // a dismissed server notice stays hidden until its text changes
+let dismissed = null;  // a dismissed server notice stays hidden until its text changes or goes away
+let clientNote = false;  // a notice raised by the page itself (failed request) survives render()
 function showNotice(text, fromServer) {
   const n = $("#notice");
-  if (fromServer && text === dismissed) text = "";
-  if (!fromServer) dismissed = null;
+  if (fromServer) {
+    if (!text) dismissed = null;
+    if (text && text === dismissed) text = "";
+    if (!text && clientNote) return;
+    if (text) clientNote = false;
+  } else {
+    clientNote = !!text;
+  }
   $("#notice-text").textContent = text || "";
   n.hidden = !text;
+}
+
+function clearClientNotice() {
+  if (!clientNote) return;
+  clientNote = false;
+  clientNote = false;
+  $("#notice").hidden = true;
 }
 
 function dismissNotice() {
@@ -137,9 +152,10 @@ function render(snap) {
   $("#tokens-none").textContent = `no memory ${snap.columns.none.tokens.toLocaleString()}`;
   $("#tokens-full").textContent = `memory ${snap.columns.full.tokens.toLocaleString()}`;
   showNotice(snap.notice, true);
-  const live = snap.mode === "live";
-  $("#mode-text").textContent = live ? "Live model" : "Replay, offline";
-  $("#mode-status").classList.toggle("replay", !live);
+  currentMode = snap.mode;
+  const labels = { live: "Live model", replay: "Replay, offline", warmup: "Warm-up, recording" };
+  $("#mode-text").textContent = labels[snap.mode] || snap.mode;
+  $("#mode-status").classList.toggle("replay", snap.mode === "replay");
   for (const c of COLS) {
     const err = $(`#error-${c}`);
     err.textContent = snap.columns[c].error || "";
@@ -184,11 +200,15 @@ function pollWhileBusy(isBusy) {
 
 function setBusy(v) {
   busy = v;
-  for (const id of ["send-btn", "advance", "reflect", "reset", "wipe", "mode-live", "mode-replay"]) $(`#${id}`).disabled = v;
+  for (const id of ["send-btn", "advance", "reflect", "reset", "wipe"]) $(`#${id}`).disabled = v;
+  // the active mode button is disabled too, so clicking it cannot do anything
+  $("#mode-live").disabled = v || currentMode === "live";
+  $("#mode-replay").disabled = v || currentMode === "replay";
   $$("#chips button").forEach((b) => { b.disabled = v; });
 }
 
 async function forget(c, id) {
+  clearClientNotice();
   try { render(await api("/api/forget", { column: c, entry_id: id })); } catch (e) { showNotice(e.message); }
 }
 
@@ -217,6 +237,8 @@ function parseSSE(buf, onEvent) {
 async function send(text) {
   text = text.trim();
   if (!text || busy) return;
+  clearClientNotice();
+  disarmWipe();
   sending = true;
   setBusy(true);
   const bubbles = {};
@@ -321,6 +343,8 @@ initTheme();
 // One request at a time: every control is disabled while it runs and is re-enabled whether it works or not.
 async function act(path, body, after) {
   if (busy) return;
+  clearClientNotice();
+  if (path !== "/api/wipe") disarmWipe();
   acting = true;
   setBusy(true);
   try {
@@ -345,10 +369,13 @@ function disarmWipe() {
   const w = $("#wipe");
   w.textContent = "Wipe all data";
   w.classList.remove("danger");
+  $("#wipe-status").textContent = "";
 }
 
-$("#mode-live").addEventListener("click", () => act("/api/mode", { mode: "live" }));
-$("#mode-replay").addEventListener("click", () => act("/api/mode", { mode: "replay" }));
+// A mode switch rebuilds the memory from the user's messages only, so the old transcripts no longer match.
+$("#mode-live").addEventListener("click", () => act("/api/mode", { mode: "live" }, clearTranscripts));
+$("#mode-replay").addEventListener("click", () => act("/api/mode", { mode: "replay" }, clearTranscripts));
+$("#wipe").addEventListener("blur", disarmWipe);
 $("#advance").addEventListener("click", () => act("/api/advance"));
 $("#reflect").addEventListener("click", () => act("/api/reflect"));
 $("#reset").addEventListener("click", () => act("/api/reset", undefined, clearTranscripts));
@@ -357,6 +384,7 @@ $("#wipe").addEventListener("click", () => {
     const w = $("#wipe");
     w.textContent = "Confirm wipe";
     w.classList.add("danger");
+    $("#wipe-status").textContent = "Press again within 5 seconds to wipe all data";
     wipeTimer = setTimeout(disarmWipe, 5000);
     return;
   }

@@ -154,10 +154,26 @@ def test_failover_replays_user_turns_from_rehearsed_cache(paths):
     out = s.turn(T2)  # live call raises OSError
     snap = s.snapshot()
     assert snap["mode"] == "replay"
-    assert snap["notice"] == "Live call failed, switched to replay, replaying your last 2 turns"
+    assert snap["notice"] == ("Live call failed, switched to replay. Memory rebuilt from your 2 messages. "
+                              "The date, reflect and forgotten items were reset.")
     assert out["full"].error is None and out["full"].reply == f"re: {T2}"
     assert [e["text"] for e in snap["columns"]["full"]["entries"]["facts"]] == ["Lives in Hanoi"]
     assert s.turn("free typed")["full"].error == "Not in the rehearsed script, replay cannot answer"
+
+
+def test_manual_replay_switch_says_what_was_reset(paths):
+    warm = make(paths)
+    warm.turn(T1)
+    s = make(paths)
+    s.turn(T1)
+    s.advance()
+    s.set_mode("replay")
+    snap = s.snapshot()
+    assert snap["notice"] == ("Switched to replay. Memory rebuilt from your 1 message. "
+                              "The date, reflect and forgotten items were reset.")
+    assert snap["date"] == "Mon 2026-01-05"
+    s.set_mode("live")
+    assert s.snapshot()["notice"] is None
 
 
 def test_reset_restores_initial_state(paths):
