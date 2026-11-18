@@ -103,6 +103,18 @@ function keepScroll(node, fill) {
   node.scrollTop = top;
 }
 
+const tabSelectors = {};
+
+// Show the tab that holds what just changed; an empty tab gives way to the first one with entries.
+function showChangedTab(c, data) {
+  const cur = KINDS.findIndex((k) => $(`#tab-${c}-${k}`).getAttribute("aria-selected") === "true");
+  const fresh = KINDS.findIndex((k) => data.entries[k].some((e) => e.new));
+  const filled = KINDS.findIndex((k) => data.entries[k].length);
+  const target = fresh >= 0 ? (data.entries[KINDS[cur]].some((e) => e.new) ? cur : fresh)
+    : (data.entries[KINDS[cur]].length ? cur : filled);
+  if (target >= 0 && target !== cur && tabSelectors[c]) tabSelectors[c](target, false);
+}
+
 function renderPanel(c, data) {
   for (const k of KINDS) {
     const list = data.entries[k];
@@ -118,6 +130,7 @@ function renderPanel(c, data) {
     });
   }
   $(`#seen-${c}`).textContent = data.recalled || "(nothing was recalled)";
+  showChangedTab(c, data);
 }
 
 function renderTodos(c, data) {
@@ -308,6 +321,7 @@ function initTabs(c) {
     });
     if (focus) tabs[i].focus();
   };
+  tabSelectors[c] = select;
   tabs.forEach((t, i) => {
     t.addEventListener("click", () => select(i, false));
     t.addEventListener("keydown", (ev) => {

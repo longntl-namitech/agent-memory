@@ -108,7 +108,7 @@ p { margin: 0; }
 
 /* Columns */
 .columns {
-  flex: 1; min-height: 0; overflow-y: auto; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: minmax(470px, 1fr);
+  flex: 1; min-height: 0; overflow-y: auto; display: grid; grid-template-columns: minmax(0, 4fr) minmax(0, 7fr); grid-template-rows: minmax(470px, 1fr);
   gap: var(--s4); padding: var(--s4) var(--s6);
 }
 .col {
@@ -123,7 +123,7 @@ p { margin: 0; }
   flex: 1 1 0; min-height: 160px; overflow-y: auto; display: flex; flex-direction: column; gap: var(--s2);
   padding: var(--s1);
 }
-.msg { white-space: pre-wrap; overflow-wrap: anywhere; max-width: 85%; padding: var(--s2) var(--s1); line-height: 1.6; }
+.msg { white-space: pre-wrap; overflow-wrap: anywhere; max-width: 90%; padding: var(--s2) var(--s1); font-size: 17px; line-height: 1.6; }
 .msg.error { border: 1px solid var(--danger); border-radius: var(--radius); padding: var(--s2) var(--s3); color: var(--danger); }
 .msg.pending { color: var(--muted-fg); min-height: 2.4em; min-width: 12em; }
 .dots::after { content: "..."; }
@@ -182,3 +182,20 @@ p { margin: 0; }
   .todo { min-height: 80px; padding: var(--s2) var(--s4); }
   .col { gap: var(--s2); }
 }
+
+/* With memory: chat on the left, memory and to-do on the right, so what changed is next to what was said */
+#col-full { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr) auto; column-gap: var(--s4); row-gap: var(--s3); }
+#col-full .col-head, #col-full .col-error { grid-column: 1 / -1; }
+#col-full .transcript { grid-column: 1; grid-row: 3 / 5; }
+#col-full .panel { grid-column: 2; grid-row: 3; flex: none; }
+#col-full .todo { grid-column: 2; grid-row: 4; flex: none; }
+
+/* Composer: centred, roomy, like a chat app */
+.inputbar { align-items: center; }
+.chips, .send { width: 100%; max-width: 1240px; }
+.input { min-height: 48px; padding: var(--s3) var(--s4); border-radius: 14px; font-size: 17px; }
+
+/* No memory: its panel and to-do are empty by design, so they stay short and the chat gets the room */
+#col-none .panel { flex: none; min-height: 0; }
+#col-none .pane { flex: none; min-height: 0; max-height: 96px; }
+#col-none .todo { flex: none; min-height: 0; }
