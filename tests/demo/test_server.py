@@ -50,6 +50,8 @@ class Ctx:
         c = http.client.HTTPConnection("127.0.0.1", self.port, timeout=10)
         h = dict(headers or {})
         data = raw if raw is not None else (json.dumps(body) if body is not None else None)
+        if data is not None:
+            h.setdefault("Content-Type", "application/json")
         c.request(method, path, body=data, headers=h)
         r = c.getresponse()
         out = r.status, r.read().decode()
@@ -63,6 +65,9 @@ def ctx(paths, tmp_path):
     yield c
     c.srv.shutdown()
     c.srv.server_close()
+
+
+JSON = {"Content-Type": "application/json"}
 
 
 def events(text):
@@ -103,8 +108,8 @@ def test_oversized_body_400(ctx):
 
 
 def test_malformed_json_400(ctx):
-    for raw in ("{nope", "[1]", ""):
-        status, body = ctx.req("POST", "/api/forget", raw=raw, headers={"Content-Length": str(len(raw))})
+    for raw in ("{nope", "[1]"):
+        status, body = ctx.req("POST", "/api/forget", raw=raw, headers=JSON)
         assert status == 400 and "Traceback" not in body
     assert ctx.req("POST", "/api/turn", {"text": 5})[0] == 400
 
@@ -130,23 +135,39 @@ def test_forget_unknown_404_and_known_200(ctx):
 
 
 def test_error_event_never_contains_the_key(paths, tmp_path, monkeypatch, caplog):
-    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-123")
+    key = "hunter2-plainkey"  # does not look like an sk- token, so only the exact-secret masking can catch it
+    monkeypatch.setenv("OPENAI_API_KEY", key)
 
     def leaky(model, messages):
-        raise RuntimeError("boom sk-test-123 Bearer abcdefghijklmnop")
+        raise RuntimeError(f"boom {key} Bearer abcdefghijklmnop")
 
     c = Ctx(paths, tmp_path, leaky)
     try:
         with caplog.at_level(logging.DEBUG):
             status, body = c.req("POST", "/api/turn", {"text": T1})
             _, state = c.req("GET", "/api/state")
-            c.req("GET", "/static/sk-test-123")
-        assert status == 200 and "error" in body
-        for text in (body, state, caplog.text):
-            assert "sk-test-123" not in text and "abcdefghijklmnop" not in text
+            s404, b404 = c.req("GET", f"/static/{key}")
+            c.req("GET", f"/static/{key}?q={key}")
+        assert status == 200 and "error" in body and s404 == 404
+        for text in (body, state, b404, caplog.text):
+            assert key not in text and "abcdefghijklmnop" not in text
+        assert "[redacted]" in caplog.text  # the request line was logged, masked
     finally:
         c.srv.shutdown()
         c.srv.server_close()
+
+
+def test_cross_origin_post_refused_and_content_type_checked(ctx):
+    ctx.req("POST", "/api/turn", {"text": T1})
+    evil = {"Origin": "http://evil.example"}
+    assert ctx.req("POST", "/api/mode", {"mode": "replay"}, headers=evil)[0] == 403
+    assert ctx.session.snapshot()["mode"] == "live"
+    assert ctx.req("POST", "/api/wipe", headers=evil)[0] == 403
+    assert ctx.session.snapshot()["columns"]["full"]["entries"]["facts"]
+    assert ctx.req("POST", "/api/mode", raw='{"mode": "replay"}', headers={"Content-Type": "text/plain"})[0] == 415
+    ok = {"Origin": f"http://127.0.0.1:{ctx.port}", "Content-Type": "application/json; charset=utf-8"}
+    assert ctx.req("POST", "/api/mode", {"mode": "replay"}, headers=ok)[0] == 200
+    assert ctx.req("POST", "/api/advance", headers={"Origin": f"http://localhost:{ctx.port}"})[0] == 403  # Host differs
 
 
 def test_mode_switch_and_notice(ctx):

@@ -2,6 +2,7 @@
 import json
 import logging
 import mimetypes
+import sys
 from dataclasses import asdict, is_dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -27,6 +28,7 @@ class _Bad(Exception):
 
 class Handler(BaseHTTPRequestHandler):
     server_version = "agent-memory-demo"
+    timeout = 30
 
     # -- plumbing -----------------------------------------------------------------------------
     @property
@@ -67,7 +69,15 @@ class Handler(BaseHTTPRequestHandler):
         n = int(raw)
         if n > MAX_BODY:
             self.close_connection = True
+            left = min(n, 1 << 20)  # drain what the client is sending so it sees the 400, not a reset
+            while left > 0:
+                chunk = self.rfile.read(min(left, 65536))
+                if not chunk:
+                    break
+                left -= len(chunk)
             raise _Bad(400, "body too large")
+        if n and self.headers.get_content_type() != "application/json":
+            raise _Bad(415, "Content-Type must be application/json")
         try:
             data = json.loads(self.rfile.read(n) or b"{}")
         except (ValueError, UnicodeDecodeError):
@@ -82,15 +92,18 @@ class Handler(BaseHTTPRequestHandler):
                 raise _Bad(403, "forbidden host")
             fn()
         except _Bad as e:
-            self._json({"error": e.msg}, e.code)
+            self._reply_error(e.msg, e.code)
         except (BrokenPipeError, ConnectionResetError):
             self.close_connection = True
         except Exception as exc:  # no traceback to the client, and only redacted text in the log
             log.error("request failed: %s", self._redact(f"{type(exc).__name__}: {exc}"))
-            try:
-                self._json({"error": "internal error"}, 500)
-            except OSError:
-                pass
+            self._reply_error("internal error", 500)
+
+    def _reply_error(self, msg: str, code: int) -> None:
+        try:
+            self._json({"error": msg}, code)
+        except OSError:  # the client left; nothing to tell it
+            self.close_connection = True
 
     # -- routes -------------------------------------------------------------------------------
     def do_GET(self):
@@ -134,6 +147,9 @@ class Handler(BaseHTTPRequestHandler):
                   "/api/wipe": lambda b: self._act(self.session.wipe)}
         if path not in routes:
             raise _Bad(404, "not found")
+        origin = self.headers.get("Origin")  # CSRF: browsers always send Origin on cross-site POSTs
+        if origin is not None and origin != f"http://{self.headers.get('Host')}":
+            raise _Bad(403, "cross-origin request refused")
         routes[path](self._body())
 
     def _act(self, fn) -> None:
@@ -195,6 +211,11 @@ class DemoServer(ThreadingHTTPServer):
     def __init__(self, addr, session: Session, static_dir: Path) -> None:
         super().__init__(addr, Handler)
         self.session, self.static_dir = session, Path(static_dir)
+
+    def handle_error(self, request, client_address):  # one redacted line instead of a traceback on stderr
+        exc = sys.exc_info()[1]
+        if not isinstance(exc, (BrokenPipeError, ConnectionResetError, TimeoutError)):
+            log.error("connection error: %s", redact(f"{type(exc).__name__}: {exc}", self.session._secrets()))
 
 
 def make_server(session: Session, port: int = 0, static_dir: Path | None = None) -> ThreadingHTTPServer:
