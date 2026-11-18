@@ -434,7 +434,7 @@ def _demo(args, *, transport=None, embed_transport=None, ready=None) -> int:
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
-    print(f"estimated tokens: {estimate_tokens(include_second_act=True):,} (placeholder, unverified until a real warm-up)")
+    print(f"estimated tokens: {estimate_tokens(include_second_act=True):,} (estimate from one rehearsal, about 1,000 per turn)")
     print(f"data dir: {paths.root}")
     if args.estimate_only:
         return 0

@@ -86,7 +86,7 @@ uv run agent-memory demo --warmup          # calls the model once and costs toke
 uv run agent-memory demo                   # serves http://127.0.0.1:8765/ (live mode; --mode replay for offline)
 ```
 
-Run it from a checkout of the repo: the demo configs (`configs/demo/`) and the default `.demo/` folder are not packaged in a wheel. Live mode and `--warmup` need `OPENAI_API_KEY`, `EMBEDDING_BASE_URL` and `EMBEDDING_MODEL` in the environment. The estimate (3,000 tokens per scripted turn) is a placeholder until a real warm-up is measured. Privacy: in live mode the text you type is sent to the configured LLM and embedding providers. Everything the demo stores is in `.demo/` (gitignored); the "Wipe all data" button deletes the demo's own folders in it. `--mode replay` needs a finished `--warmup` first. See [docs/demo.md](docs/demo.md) for the pitch checklist.
+Run it from a checkout of the repo: the demo configs (`configs/demo/`) and the default `.demo/` folder are not packaged in a wheel. Live mode and `--warmup` need `OPENAI_API_KEY`, `EMBEDDING_BASE_URL` and `EMBEDDING_MODEL` in the environment. The estimate (about 1,000 tokens per scripted turn, 4,000 for the whole story) comes from one rehearsal; see [docs/demo.md](docs/demo.md#rehearsal-numbers). Privacy: in live mode the text you type is sent to the configured LLM and embedding providers. Everything the demo stores is in `.demo/` (gitignored); the "Wipe all data" button deletes the demo's own folders in it. `--mode replay` needs a finished `--warmup` first. See [docs/demo.md](docs/demo.md) for the pitch checklist.
 
 ## Methods
 

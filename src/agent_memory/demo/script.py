@@ -14,8 +14,9 @@ PROMPTS = [
 
 SECOND_ACT = "This week I'm on a diet."
 
-# Unverified placeholder until the real warm-up (T17) measures it: tokens per scripted turn, both columns together.
-TOKENS_PER_TURN = 3000
+# Estimate, not a guarantee: the 2026-11-18 rehearsal (gpt-5.4-nano, text-embedding-3-small) used 3,631 tokens for
+# 4 turns (about 900 per turn, both columns together); rounded up. Wording varies per run, so the cost does too.
+TOKENS_PER_TURN = 1000
 
 
 def run_script(session: "Session", include_second_act: bool = False) -> None:
