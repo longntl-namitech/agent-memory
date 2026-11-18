@@ -135,11 +135,11 @@ p { margin: 0; }
   flex: 1 1 0; min-height: 160px; overflow-y: auto; display: flex; flex-direction: column; gap: var(--s2);
   padding: var(--s1);
 }
-.msg { white-space: pre-wrap; overflow-wrap: anywhere; max-width: 90%; padding: var(--s2) var(--s1); font-size: 17px; line-height: 1.6; }
+.msg { white-space: pre-wrap; overflow-wrap: anywhere; max-width: 90%; padding: var(--s3) var(--s4); font-size: 17px; line-height: 1.6; background: var(--bg); border: 1px solid var(--outline); border-radius: var(--radius-card); box-shadow: var(--shadow); }
 .msg.error { border: 1px solid var(--danger); border-radius: var(--radius); padding: var(--s2) var(--s3); color: var(--danger); }
 .msg.pending { color: var(--muted-fg); min-height: 2.4em; min-width: 12em; }
 .dots::after { content: "..."; }
-.msg.user { align-self: flex-end; background: var(--muted); border-radius: 999px; padding: var(--s2) var(--s4); }
+.msg.user { align-self: flex-end; background: var(--muted); border-color: transparent; border-radius: 999px; padding: var(--s2) var(--s4); box-shadow: none; }
 
 /* Memory panel: monospace for memory text */
 .panel { position: relative; display: flex; flex-direction: column; flex: 0 1 230px; min-height: 120px; border: 1px solid var(--hairline); border-radius: var(--radius-card); background: var(--bg); }
