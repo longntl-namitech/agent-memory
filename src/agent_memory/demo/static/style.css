@@ -127,7 +127,7 @@ p { margin: 0; }
 .msg.user { align-self: flex-end; background: transparent; border: 1px solid var(--outline); }
 
 /* Memory panel: monospace for memory text */
-.panel { position: relative; display: flex; flex-direction: column; flex: 0 1 210px; min-height: 120px; border: 1px solid var(--hairline); border-radius: var(--radius); background: var(--bg); }
+.panel { position: relative; display: flex; flex-direction: column; flex: 0 1 230px; min-height: 120px; border: 1px solid var(--hairline); border-radius: var(--radius); background: var(--bg); }
 .tabs { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s2); padding: var(--s2); border-bottom: 1px solid var(--hairline); }
 .tab { white-space: nowrap; min-height: 32px; padding: var(--s1) var(--s3); font-size: 15px; letter-spacing: 0.06em; border-color: transparent; background: transparent; color: var(--muted-fg); }
 .tab[aria-selected="true"] { color: var(--fg); border-color: var(--outline); background: var(--card); }
@@ -171,4 +171,11 @@ p { margin: 0; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+
+/* Short windows (1100x800 with a banner): give the memory pane the room, not the transcript or the to-do card */
+@media (max-height: 850px) {
+  .transcript { min-height: 130px; }
+  .todo { min-height: 80px; padding: var(--s2) var(--s4); }
+  .col { gap: var(--s2); }
 }

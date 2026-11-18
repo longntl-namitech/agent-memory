@@ -129,7 +129,7 @@ def test_theme_tokens_defined_for_both_themes():
 
 def _px(css: str, selector: str):
     """The px size declared by the rule for exactly this selector, or None if it inherits."""
-    body = re.search(r"(?:^|\n|\})\s*" + re.escape(selector) + r"\s*\{([^}]*)\}", css).group(1)
+    body = re.search(r"(?:^|\n|\})\s*" + re.escape(selector) + r"\s*(?:,[^{]*)?\{([^}]*)\}", css).group(1)
     m = re.search(r"font(?:-size)?:\s*(?:[\w-]+\s+)?(\d+)px", body)
     return int(m.group(1)) if m else None
 
@@ -138,7 +138,7 @@ def test_font_sizes_meet_minimums():
     css = (STATIC / "style.css").read_text()
     assert _px(css, "body") == 15
     # UI text is at least 15px; a rule that sets no size inherits the 15px body size
-    for sel in (".mono", ".meter-label", ".mode-status", ".btn.small", ".tab", ".chips button"):
+    for sel in (".btn", ".mono", ".meter-label", ".mode-status", ".btn.small", ".tab", ".chips button"):
         px = _px(css, sel)
         assert px is None or px >= 15, (sel, px)
     # memory text (pane, what-the-assistant-saw, entry meta, badges) is at least 14px

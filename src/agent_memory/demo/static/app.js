@@ -319,11 +319,21 @@ function initTabs(c) {
     });
   });
   const toggle = $(`#seen-toggle-${c}`);
-  toggle.textContent = "Show what the assistant saw";
+  // Narrow windows get a short visible label so the tabs and the toggle fit on one row; the accessible
+  // name stays the full sentence and aria-expanded carries the state.
+  const compact = window.matchMedia("(max-width: 1279px)");
+  const label = () => {
+    const open = toggle.getAttribute("aria-expanded") === "true";
+    const full = `${open ? "Hide" : "Show"} what the assistant saw`;
+    toggle.setAttribute("aria-label", full);
+    toggle.textContent = compact.matches ? "What it saw" : full;
+  };
+  label();
+  compact.addEventListener("change", label);
   toggle.addEventListener("click", () => {
     const open = toggle.getAttribute("aria-expanded") !== "true";
     toggle.setAttribute("aria-expanded", String(open));
-    toggle.textContent = open ? "Hide what the assistant saw" : "Show what the assistant saw";
+    label();
     $(`#seen-${c}`).hidden = !open;
   });
   const seen = $(`#seen-${c}`);
