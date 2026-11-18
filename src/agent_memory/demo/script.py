@@ -1,4 +1,8 @@
 """The scripted story for the fictional persona."""
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from agent_memory.demo.session import Session
 
 PERSONA = "An"
 
@@ -14,7 +18,7 @@ SECOND_ACT = "This week I'm on a diet."
 TOKENS_PER_TURN = 3000
 
 
-def run_script(session, include_second_act: bool = False) -> None:
+def run_script(session: "Session", include_second_act: bool = False) -> None:
     for text in [*PROMPTS, *([SECOND_ACT] if include_second_act else [])]:
         session.turn(text)
 

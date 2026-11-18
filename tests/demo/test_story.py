@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from agent_memory.demo.paths import DEFAULT_ROOT, DemoPaths
-from agent_memory.demo.script import PROMPTS, SECOND_ACT, estimate_tokens, run_script
+from agent_memory.demo.script import PROMPTS, estimate_tokens, run_script
 from agent_memory.demo.session import Session
 
 CONFIGS = Path(__file__).resolve().parents[2] / "configs" / "demo"
@@ -76,29 +76,30 @@ def test_story_end_to_end(paths):
 
 def test_warmup_then_replay_makes_zero_provider_calls(paths):
     warm = make(paths, mode="warmup")
-    run_script(warm)
-    replies = [warm.snapshot()["columns"]["full"]["recalled"]]
+    warm_outs = [warm.turn(t) for t in PROMPTS]
+    warm_recalled = warm.snapshot()["columns"]["full"]["recalled"]
     calls = []
     s = make(paths, mode="replay", transport=fake_model(calls))
-    outs = []
-    for t in PROMPTS:
-        outs.append(s.turn(t))
+    outs = [s.turn(t) for t in PROMPTS]
     assert calls == []
     assert all(o[c].error is None for o in outs for c in o)
+    for w, o in zip(warm_outs, outs):
+        assert {c: o[c].reply for c in o} == {c: w[c].reply for c in w}
     assert "Hanoi" in outs[2]["full"].reply and "don't know" in outs[2]["none"].reply
-    assert s.snapshot()["columns"]["full"]["recalled"] == replies[0]
+    assert s.snapshot()["columns"]["full"]["recalled"] == warm_recalled
 
 
 def test_second_act_log_expires_after_seven_advances(paths):
     s = make(paths)
     run_script(s, include_second_act=True)
     assert [e["text"] for e in s.snapshot()["columns"]["full"]["entries"]["log"]] == ["On a diet this week"]
-    for _ in range(7):
+    for _ in range(6):
         s.advance()
+    assert len(s.snapshot()["columns"]["full"]["entries"]["log"]) == 1
+    s.advance()
     c = s.snapshot()["columns"]["full"]
     assert c["entries"]["log"] == [] and c["entries"]["facts"] and c["todos"]
 
 
 def test_estimate_tokens():
     assert estimate_tokens(True) > estimate_tokens() > 0
-    assert SECOND_ACT
