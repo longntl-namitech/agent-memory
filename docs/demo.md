@@ -1,6 +1,6 @@
 # Chat demo: pitch checklist
 
-The demo must be run from a checkout of the repo: the demo configs (`configs/demo/`) and the default `.demo/` folder are not packaged in a wheel. It is a local web page with two assistants answering the same messages side by side: one with no memory and one with the lab's full memory (write, sort, recall, reflect, forget). It is a toy personal assistant for a fictional user named An, not part of the lab's measurements. See the [Demo section of the README](../README.md#demo) for the short version.
+The demo must be run from a checkout of the repo: the demo configs (`configs/demo/`) and the default `.demo/` folder are not packaged in a wheel. It is a local web page with two assistants answering the same messages side by side: one with no memory and one with the full memory (write, sort, recall, reflect, forget). It is a toy personal assistant for a fictional user named An, not part of the measurements. See the [Demo section of the README](../README.md#demo) for the short version.
 
 ## Before the pitch
 
