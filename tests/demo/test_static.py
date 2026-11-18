@@ -94,4 +94,5 @@ def test_static_has_flash_and_reduced_motion_css():
     assert "@keyframes flash" in css and ".entry.flash" in css
     block = re.search(r"@media \(prefers-reduced-motion: reduce\)\s*\{(.*?)\n\}", css, re.S).group(1)
     assert "animation: none" in block
-    assert ".entry.new {" in css and "border-left-color: var(--accent)" in css  # static cue stays
+    rule = re.search(r"\.entry\.new \{(.*?)\}", css, re.S).group(1)  # the static cue stays under reduced motion
+    assert "border-left-color: var(--accent)" in rule and "animation" not in rule

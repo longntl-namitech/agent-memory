@@ -23,6 +23,8 @@ const COLS = ["none", "full"];
 const KINDS = ["rules", "facts", "log"];
 const seenNew = new Set();
 let busy = false;
+let sending = false;
+let serverBusy = false;
 
 function el(tag, cls, text) {
   const n = document.createElement(tag);
@@ -71,23 +73,32 @@ function entryNode(col, e) {
   return row;
 }
 
+function keepScroll(node, fill) {
+  const top = node.scrollTop;
+  fill();
+  node.scrollTop = top;
+}
+
 function renderPanel(c, data) {
   for (const k of KINDS) {
     const list = data.entries[k];
     $(`#tab-${c}-${k}`).textContent = `${k.toUpperCase()} ${list.length}`;
     const pane = $(`#pane-${c}-${k}`);
-    pane.replaceChildren();
-    if (!list.length) {
-      pane.append(el("p", "empty dim", c === "none" ? "Nothing is kept for this assistant" : `No ${k} yet`));
-    } else {
-      pane.append(...list.map((e) => entryNode(c, e)));
-    }
+    keepScroll(pane, () => {
+      pane.replaceChildren();
+      if (!list.length) {
+        pane.append(el("p", "empty dim", c === "none" ? "Nothing is kept for this assistant" : `No ${k} yet`));
+      } else {
+        pane.append(...list.map((e) => entryNode(c, e)));
+      }
+    });
   }
   $(`#seen-${c}`).textContent = data.recalled || "(nothing was recalled)";
 }
 
 function renderTodos(c, data) {
   const ul = $(`#todo-${c} .todo-list`);
+  const top = ul.scrollTop;
   ul.replaceChildren();
   if (!data.todos.length) {
     ul.append(el("li", "empty dim", c === "none" ? "No memory, no list" : "Nothing on the list yet"));
@@ -103,6 +114,7 @@ function renderTodos(c, data) {
     li.append(b);
     ul.append(li);
   }
+  ul.scrollTop = top;
 }
 
 function render(snap) {
@@ -124,7 +136,21 @@ function render(snap) {
     }
   }
   for (const c of COLS) { renderPanel(c, snap.columns[c]); renderTodos(c, snap.columns[c]); }
-  setBusy(snap.busy || busy);
+  serverBusy = snap.busy;
+  setBusy(snap.busy || sending);
+  pollWhileBusy(snap.busy);
+}
+
+// After a reload mid-turn the server may still be busy: poll about once a second, one poll at a time.
+let polling = false;
+function pollWhileBusy(serverBusy) {
+  if (!serverBusy || polling || sending) return;
+  polling = true;
+  setTimeout(async () => {
+    polling = false;
+    if (sending) return;
+    try { render(await api("/api/state")); } catch (e) { showNotice(e.message); }
+  }, 1000);
 }
 
 function setBusy(v) {
@@ -144,8 +170,6 @@ function addMsg(c, text, cls) {
   return m;
 }
 
-// Deltas fill a busy bubble inside a transcript that is aria-busy, so a screen reader hears the whole
-// message once, when the turn is complete, not every chunk.
 function parseSSE(buf, onEvent) {
   let i;
   while ((i = buf.indexOf("\n\n")) >= 0) {
@@ -164,8 +188,11 @@ function parseSSE(buf, onEvent) {
 async function send(text) {
   text = text.trim();
   if (!text || busy) return;
+  sending = true;
   setBusy(true);
   const bubbles = {};
+  // Deltas fill a pending bubble inside a transcript that is aria-busy, so a screen reader hears the
+  // whole message once, when the turn is complete, not every chunk.
   for (const c of COLS) {
     $(`#transcript-${c}`).setAttribute("aria-busy", "true");
     addMsg(c, text, "user");
@@ -175,6 +202,7 @@ async function send(text) {
   }
   $("#input").value = "";
   const got = {};
+  let gotSnapshot = false;
   const onEvent = (name, d) => {
     if (name === "delta") {
       const b = bubbles[d.column];
@@ -187,7 +215,7 @@ async function send(text) {
         b.classList.add("error");
         b.append(got[d.column] && b.textContent ? ` (${d.message})` : d.message);
       } else showNotice(d.message);
-    } else if (name === "snapshot") render(d);
+    } else if (name === "snapshot") { gotSnapshot = true; render(d); }
   };
   try {
     const r = await fetch("/api/turn", {
@@ -205,12 +233,17 @@ async function send(text) {
   } catch (e) {
     showNotice(e.message);
   } finally {
+    sending = false;
+    if (!gotSnapshot) {  // stream ended or dropped without a snapshot: ask the server for the state
+      try { render(await api("/api/state")); } catch (e) { showNotice(e.message); }
+    }
     for (const c of COLS) {
       const b = bubbles[c];
       if (b.classList.contains("pending")) { b.replaceChildren(); b.classList.remove("pending"); b.classList.add("error"); b.textContent = "No reply"; }
       $(`#transcript-${c}`).setAttribute("aria-busy", "false");
     }
-    setBusy(false);
+    setBusy(serverBusy);
+    pollWhileBusy(serverBusy);
     $("#input").focus();
   }
 }
